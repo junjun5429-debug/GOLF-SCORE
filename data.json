@@ -1,7 +1,7 @@
 {
  "app": "golf-score-app",
  "version": 1,
- "exportedAt": "2026-08-12T05:53:57.076Z",
+ "exportedAt": "2026-08-12T06:20:55.717Z",
  "data": {
   "members": [
    "柴谷",
@@ -712,6 +712,38 @@
       "prev": 109,
       "olympic": 0,
       "expense": 2000
+     }
+    }
+   },
+   {
+    "id": "mspolcsk31yej",
+    "date": "2026-08-12",
+    "course": "テスト",
+    "rate": 150,
+    "players": {
+     "柴谷": {
+      "score": 100,
+      "prev": 91,
+      "olympic": 5,
+      "expense": 1000
+     },
+     "江田": {
+      "score": 105,
+      "prev": 103,
+      "olympic": 8,
+      "expense": 1500
+     },
+     "松田": {
+      "score": 90,
+      "prev": 114,
+      "olympic": 3,
+      "expense": 500
+     },
+     "吉田": {
+      "score": 110,
+      "prev": 110,
+      "olympic": -5,
+      "expense": 3000
      }
     }
    }
