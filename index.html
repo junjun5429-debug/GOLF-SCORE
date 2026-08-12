@@ -6,15 +6,15 @@
   <meta name="theme-color" content="#1b7d3f" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="ゴルフスコア" />
+  <meta name="apple-mobile-web-app-title" content="ゴルフぐるーぶ" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png" />
   <link rel="stylesheet" href="styles.css" />
-  <title>ゴルフスコア管理</title>
+  <title>ゴルフぐるーぶ</title>
 </head>
 <body>
   <header class="app-header">
-    <h1>⛳ ゴルフスコア</h1>
+    <h1>⛳ ゴルフぐるーぶ</h1>
     <div class="header-actions">
       <button id="btn-sync" class="icon-btn" aria-label="最新データを取得">🔄</button>
       <button id="btn-settings" class="icon-btn" aria-label="設定">⚙️</button>
@@ -24,7 +24,8 @@
   <main id="app">
     <!-- ラウンド一覧 -->
     <section id="view-list" class="view">
-      <h2 class="stats-title">個人スコア <span class="muted">（全試合トータル平均）</span></h2>
+      <div id="latest-round"></div>
+      <h2 class="stats-title">個人アベレージ <span class="muted">（全試合トータル）</span></h2>
       <div class="stats-grid" id="stats-grid"></div>
       <div class="chart-card">
         <div class="chart-head">

@@ -229,10 +229,34 @@ function showView(name) {
 /* ---------- 一覧画面 ---------- */
 function renderList() {
   const rounds = sortedRounds();
+  renderLatest(rounds);
   renderStats(rounds);
   renderRangeTabs();
   renderChart(rounds);
   renderRoundList(rounds);
+}
+
+function renderLatest(rounds) {
+  const el = $('#latest-round');
+  if (!el) return;
+  if (!rounds.length) {
+    el.innerHTML = '';
+    return;
+  }
+  const r = rounds[rounds.length - 1];
+  const scores = state.members
+    .map((m, i) => `<div class="lc-s"><span class="nm">${m}</span><b style="color:${MEMBER_HEX[i % 4]}">${num(r.players[m].score) || '-'}</b></div>`)
+    .join('');
+  el.innerHTML = `
+    <div class="latest-card">
+      <div class="lc-head">
+        <span class="lc-label">最新ラウンド</span>
+        <span class="lc-date">${fmtDate(r.date)}</span>
+      </div>
+      <div class="lc-course">${r.course || 'コース未設定'}</div>
+      <div class="lc-scores">${scores}</div>
+    </div>`;
+  el.onclick = () => openDetail(r.id);
 }
 
 function renderRangeTabs() {
@@ -245,9 +269,9 @@ function renderStats(rounds) {
   const grid = $('#stats-grid');
   grid.innerHTML = '';
   const rangeN = chartRange === 'all' ? null : parseInt(chartRange, 10);
-  const label = chartRange === 'all' ? '全試合トータル平均' : `直近${chartRange}試合平均`;
+  const label = chartRange === 'all' ? '全試合トータル' : `直近${chartRange}試合`;
   const title = $('.stats-title');
-  if (title) title.innerHTML = `個人スコア <span class="muted">（${label}）</span>`;
+  if (title) title.innerHTML = `個人アベレージ <span class="muted">（${label}）</span>`;
   state.members.forEach((m, i) => {
     let scores = rounds.map((r) => num(r.players[m] && r.players[m].score)).filter((s) => s > 0);
     if (rangeN) scores = scores.slice(-rangeN);
@@ -780,7 +804,14 @@ async function pullSharedData() {
     alert('最新データが見つかりませんでした。\nまだ公開していない場合は、先に「公開用データを書き出す」または自動同期の設定を行ってください。');
     return;
   }
-  if (!confirm(`サーバーの最新データ（${shared.rounds.length}ラウンド）に置き換えます。\nこの端末の現在のデータ（${state.rounds.length}ラウンド）は上書きされます。よろしいですか？`)) {
+  const serverCount = shared.rounds.length;
+  const localCount = state.rounds.length;
+  // サーバーが同数または少ない場合は上書きしない（新しいデータが無いとみなす）
+  if (serverCount <= localCount) {
+    toast(`すでに最新です（サーバー ${serverCount} / この端末 ${localCount} ラウンド）`);
+    return;
+  }
+  if (!confirm(`サーバーに新しいデータがあります（サーバー ${serverCount} / この端末 ${localCount} ラウンド）。\n最新データに更新しますか？`)) {
     return;
   }
   state = shared;

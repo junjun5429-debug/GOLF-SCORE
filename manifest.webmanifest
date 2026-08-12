@@ -1,6 +1,6 @@
 {
-  "name": "ゴルフスコア管理",
-  "short_name": "ゴルフスコア",
+  "name": "ゴルフぐるーぶ",
+  "short_name": "ゴルフぐるーぶ",
   "description": "ゴルフのスコア・オリンピック精算・経費精算を記録して管理するアプリ",
   "start_url": "./index.html",
   "scope": "./",
