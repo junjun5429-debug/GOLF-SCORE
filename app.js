@@ -573,7 +573,7 @@ function openEdit(id) {
         <td>${m}</td>
         <td><input type="number" inputmode="numeric" data-m="${m}" data-f="score" value="${val(round.players[m].score)}" /></td>
         <td><input type="number" inputmode="numeric" data-m="${m}" data-f="prev" value="${val(round.players[m].prev)}" /></td>
-        <td><input type="number" inputmode="numeric" data-m="${m}" data-f="olympic" value="${val(round.players[m].olympic)}" /></td>
+        <td><div class="oly-wrap"><button type="button" class="pm-btn" tabindex="-1">±</button><input type="text" inputmode="numeric" data-m="${m}" data-f="olympic" value="${val(round.players[m].olympic)}" /></div></td>
         <td><input type="number" inputmode="numeric" data-m="${m}" data-f="expense" value="${val(round.players[m].expense)}" /></td>
       </tr>`
     )
@@ -614,6 +614,15 @@ function openEdit(id) {
   const back = () => (isNew ? showView('list') : openDetail(id));
   $('#e-back').addEventListener('click', back);
   $('#e-cancel').addEventListener('click', back);
+  // オリンピック欄の ± ボタン：符号を反転（iPhone対策）
+  $$('#view-edit .pm-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const inp = btn.parentElement.querySelector('input');
+      const v = inp.value.trim();
+      inp.value = v.startsWith('-') ? v.slice(1) : '-' + v;
+      inp.focus();
+    });
+  });
   $('#e-save').addEventListener('click', () => {
     round.date = $('#e-date').value || new Date().toISOString().slice(0, 10);
     round.course = $('#e-course').value.trim();
@@ -762,14 +771,13 @@ async function pullSharedData() {
     toast('共有データが見つかりませんでした');
     return;
   }
-  const serverCount = shared.rounds.length;
-  const localCount = state.rounds.length;
-  // サーバーが同数または少ない場合は上書きしない（新しいデータが無いとみなす）
-  if (serverCount <= localCount) {
-    toast(`すでに最新です（サーバー ${serverCount} / この端末 ${localCount} ラウンド）`);
+  // 内容が同一なら更新しない（削除・編集も差分として検知するため件数ではなく内容で比較）
+  const sig = (s) => JSON.stringify({ m: s.members, d: s.defaultRate || DEFAULT_RATE, r: s.rounds });
+  if (sig(state) === sig(shared)) {
+    toast(`すでに最新です（${shared.rounds.length}ラウンド）`);
     return;
   }
-  if (!confirm(`サーバーに新しいデータがあります（サーバー ${serverCount} / この端末 ${localCount} ラウンド）。\n最新データに更新しますか？`)) {
+  if (!confirm(`サーバーの共有データ（${shared.rounds.length}ラウンド）に更新しますか？\nこの端末（${state.rounds.length}ラウンド）は上書きされます。`)) {
     return;
   }
   state = shared;

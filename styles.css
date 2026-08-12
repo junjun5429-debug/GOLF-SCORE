@@ -224,6 +224,22 @@ table.pin th { color: var(--muted); font-weight:600; font-size:12px; }
 table.pin td:first-child, table.pin th:first-child { text-align:left; position:sticky; left:0; background:var(--card); }
 table.pin input { padding:8px; text-align:center; min-width:64px; }
 
+.oly-wrap { display:flex; align-items:center; gap:4px; }
+.oly-wrap input { min-width:48px; }
+.pm-btn {
+  flex:0 0 auto;
+  width:30px; height:36px;
+  border:1px solid var(--border);
+  background:#eef1ef;
+  color:var(--text);
+  border-radius:8px;
+  font-size:16px;
+  font-weight:700;
+  cursor:pointer;
+  line-height:1;
+}
+.pm-btn:active { background:#dfe4e1; }
+
 .btn-row { display:flex; gap:10px; margin-top: 8px; }
 button.btn {
   flex:1;
