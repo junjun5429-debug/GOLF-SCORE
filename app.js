@@ -123,6 +123,19 @@ function buildSeedData() {
 /* ---------- ストレージ ---------- */
 let state = null;
 let chartRange = 'all'; // '5' | '10' | '20' | 'all'
+let selectedMembers = null; // グラフに表示するメンバー（Set）。null は全員表示
+
+function ensureSelection() {
+  if (!selectedMembers) {
+    selectedMembers = new Set(state.members);
+    return;
+  }
+  // 現在のメンバーに存在しない名前を除去
+  for (const m of [...selectedMembers]) {
+    if (!state.members.includes(m)) selectedMembers.delete(m);
+  }
+  if (selectedMembers.size === 0) selectedMembers = new Set(state.members);
+}
 
 function loadState() {
   try {
@@ -268,6 +281,7 @@ function renderRangeTabs() {
 function renderStats(rounds) {
   const grid = $('#stats-grid');
   grid.innerHTML = '';
+  ensureSelection();
   const rangeN = chartRange === 'all' ? null : parseInt(chartRange, 10);
   const label = chartRange === 'all' ? '全試合トータル' : `直近${chartRange}試合`;
   const title = $('.stats-title');
@@ -276,22 +290,35 @@ function renderStats(rounds) {
     let scores = rounds.map((r) => num(r.players[m] && r.players[m].score)).filter((s) => s > 0);
     if (rangeN) scores = scores.slice(-rangeN);
     const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+    const sel = selectedMembers.has(m);
     const el = document.createElement('div');
-    el.className = 'stat';
+    el.className = 'stat' + (sel ? ' selected' : ' unselected');
+    el.style.setProperty('--mc', MEMBER_HEX[i % 4]);
     el.innerHTML = `
       <div class="name"><span class="dot" style="background:${MEMBER_HEX[i % 4]}"></span>${m}</div>
       <div class="avg">${avg ? avg.toFixed(1) : '-'}</div>
       <div class="sub">${scores.length}試合</div>`;
+    el.addEventListener('click', () => {
+      if (selectedMembers.has(m)) {
+        if (selectedMembers.size > 1) selectedMembers.delete(m);
+      } else {
+        selectedMembers.add(m);
+      }
+      renderStats(rounds);
+      renderChart(sortedRounds());
+    });
     grid.appendChild(el);
   });
 }
 
 function renderChart(rounds) {
+  ensureSelection();
+  const shown = state.members.filter((m) => selectedMembers.has(m));
   const legend = $('#chart-legend');
-  legend.innerHTML = state.members
+  legend.innerHTML = shown
     .map(
-      (m, i) =>
-        `<span class="item"><span class="swatch" style="background:${MEMBER_HEX[i % 4]}"></span>${m}</span>`
+      (m) =>
+        `<span class="item"><span class="swatch" style="background:${MEMBER_HEX[state.members.indexOf(m) % 4]}"></span>${m}</span>`
     )
     .join('');
 
@@ -323,7 +350,7 @@ function renderChart(rounds) {
 
   let min = Infinity, max = -Infinity;
   withScore.forEach((r) =>
-    state.members.forEach((m) => {
+    shown.forEach((m) => {
       const s = num(r.players[m].score);
       if (s > 0) {
         min = Math.min(min, s);
@@ -331,6 +358,13 @@ function renderChart(rounds) {
       }
     })
   );
+  if (min === Infinity) {
+    ctx.fillStyle = '#6b776f';
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('表示するメンバーを選択してください', cssW / 2, cssH / 2);
+    return;
+  }
   min = Math.floor((min - 3) / 5) * 5;
   max = Math.ceil((max + 3) / 5) * 5;
   const range = max - min || 1;
@@ -363,8 +397,9 @@ function renderChart(rounds) {
     ctx.fillText(fmtDate(withScore[i].date), xFor(i), cssH - 8);
   });
 
-  // 各メンバーの折れ線
-  state.members.forEach((m, mi) => {
+  // 各メンバーの折れ線（選択されたメンバーのみ）
+  shown.forEach((m) => {
+    const mi = state.members.indexOf(m);
     ctx.strokeStyle = MEMBER_HEX[mi % 4];
     ctx.fillStyle = MEMBER_HEX[mi % 4];
     ctx.lineWidth = 2;
@@ -626,12 +661,6 @@ function openSettings() {
     <div class="form-card">
       <div class="field"><input type="number" inputmode="numeric" id="s-rate" value="${state.defaultRate || DEFAULT_RATE}" /></div>
     </div>
-    <div class="section-title">みんなで共有（最新データ）</div>
-    <div class="form-card">
-      <div class="btn-row"><button class="btn btn-primary" id="s-pull">最新データを取得</button></div>
-      <div class="btn-row" style="margin-top:10px;"><button class="btn btn-secondary" id="s-pubdata">公開用データを書き出す</button></div>
-      <div class="hint">入力担当の端末で「公開用データを書き出す」→ できた data.json をGitHubにアップ。ほかの端末は「最新データを取得」で同じ最新データに揃います。</div>
-    </div>
     <div id="gh-reveal-wrap" class="${ghConfiguredNow ? 'hidden' : ''}" style="text-align:center;margin:6px 0 4px;">
       <button id="gh-reveal" class="linklike">管理者向け設定（自動同期）を表示</button>
     </div>
@@ -696,6 +725,7 @@ function openSettings() {
     });
     state.members = newNames;
     state.defaultRate = num($('#s-rate').value) || DEFAULT_RATE;
+    selectedMembers = new Set(newNames);
     const ghSection = $('#gh-section');
     if (ghSection && !ghSection.classList.contains('hidden')) {
       saveGhConfig({
@@ -735,8 +765,6 @@ function openSettings() {
     }
   });
   $('#s-export').addEventListener('click', exportCSV);
-  $('#s-pull').addEventListener('click', pullSharedData);
-  $('#s-pubdata').addEventListener('click', exportSharedData);
   $('#s-backup').addEventListener('click', exportBackup);
   $('#s-restore').addEventListener('click', () => $('#s-restore-file').click());
   $('#s-restore-file').addEventListener('change', (e) => {
@@ -758,21 +786,6 @@ function openSettings() {
 }
 
 /* ---------- 共有データ（data.json） ---------- */
-// 現在のデータを共有用 data.json として書き出す（手動アップ用）
-function exportSharedData() {
-  const payload = { app: 'golf-score-app', version: 1, exportedAt: new Date().toISOString(), data: state };
-  const blob = new Blob([JSON.stringify(payload, null, 1)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'data.json';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-  toast('data.json を書き出しました');
-}
-
 function normalizeSharedData(data) {
   if (data && Array.isArray(data.rounds) && Array.isArray(data.members)) {
     return { members: data.members, defaultRate: data.defaultRate || DEFAULT_RATE, rounds: data.rounds };
@@ -1055,6 +1068,10 @@ async function init() {
   $('#fab').addEventListener('click', () => openEdit(null));
   $('#btn-settings').addEventListener('click', openSettings);
   $('#btn-sync').addEventListener('click', pullSharedData);
+  $('#app-title').addEventListener('click', () => {
+    renderList();
+    showView('list');
+  });
   $('#range-tabs').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-range]');
     if (!btn) return;

@@ -1,5 +1,5 @@
 /* ゴルフスコア管理 - Service Worker (オフライン対応) */
-const CACHE = 'golf-score-v12';
+const CACHE = 'golf-score-v15';
 const ASSETS = [
   './',
   './index.html',

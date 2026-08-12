@@ -41,7 +41,7 @@ html, body {
   color: #fff;
   box-shadow: var(--shadow);
 }
-.app-header h1 { font-size: 20px; margin: 0; font-weight: 700; }
+.app-header h1 { font-size: 20px; margin: 0; font-weight: 700; cursor: pointer; }
 
 .header-actions { display: flex; align-items: center; gap: 8px; }
 
@@ -104,6 +104,20 @@ h2 { font-size: 17px; margin: 0 0 10px; }
   padding: 12px 8px;
   text-align: center;
   box-shadow: var(--shadow);
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: opacity .15s, border-color .15s;
+  position: relative;
+}
+.stat.selected { border-color: var(--mc); }
+.stat.unselected { opacity: 0.4; }
+.stat.selected::after {
+  content: '✓';
+  position: absolute;
+  top: 4px; right: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--mc);
 }
 .stat .name { font-size: 13px; color: var(--muted); }
 .stat .avg { font-size: 22px; font-weight: 700; margin-top: 2px; }
