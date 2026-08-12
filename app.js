@@ -139,6 +139,26 @@ function loadState() {
   }
 }
 
+// 共有データ(data.json)を正規化して取得。無ければ null。
+async function fetchSharedData() {
+  try {
+    const res = await fetch('data.json?ts=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return null;
+    const parsed = await res.json();
+    const data = parsed && parsed.data ? parsed.data : parsed;
+    if (data && Array.isArray(data.rounds) && Array.isArray(data.members)) {
+      return {
+        members: data.members,
+        defaultRate: data.defaultRate || DEFAULT_RATE,
+        rounds: data.rounds,
+      };
+    }
+  } catch (e) {
+    /* オフライン等 */
+  }
+  return null;
+}
+
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
@@ -577,6 +597,12 @@ function openSettings() {
     <div class="form-card">
       <div class="field"><input type="number" inputmode="numeric" id="s-rate" value="${state.defaultRate || DEFAULT_RATE}" /></div>
     </div>
+    <div class="section-title">みんなで共有（最新データ）</div>
+    <div class="form-card">
+      <div class="btn-row"><button class="btn btn-primary" id="s-pull">最新データを取得</button></div>
+      <div class="btn-row" style="margin-top:10px;"><button class="btn btn-secondary" id="s-pubdata">公開用データを書き出す</button></div>
+      <div class="hint">入力担当の端末で「公開用データを書き出す」→ できた data.json をGitHubにアップ。ほかの端末は「最新データを取得」で同じ最新データに揃います。</div>
+    </div>
     <div class="section-title">バックアップ / 引っ越し</div>
     <div class="form-card">
       <div class="btn-row"><button class="btn btn-secondary" id="s-backup">バックアップを保存</button></div>
@@ -613,6 +639,8 @@ function openSettings() {
     toast('設定を保存しました');
   });
   $('#s-export').addEventListener('click', exportCSV);
+  $('#s-pull').addEventListener('click', pullSharedData);
+  $('#s-pubdata').addEventListener('click', exportSharedData);
   $('#s-backup').addEventListener('click', exportBackup);
   $('#s-restore').addEventListener('click', () => $('#s-restore-file').click());
   $('#s-restore-file').addEventListener('change', (e) => {
@@ -631,6 +659,39 @@ function openSettings() {
   });
 
   showView('settings');
+}
+
+/* ---------- 共有データ（data.json） ---------- */
+// 現在のデータを共有用 data.json として書き出す（GitHubにアップして共有）
+function exportSharedData() {
+  const payload = { app: 'golf-score-app', version: 1, exportedAt: new Date().toISOString(), data: state };
+  const blob = new Blob([JSON.stringify(payload, null, 1)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'data.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast('data.json を書き出しました');
+}
+
+// サーバーの data.json を取得してこの端末を最新に置き換える
+async function pullSharedData() {
+  const shared = await fetchSharedData();
+  if (!shared) {
+    alert('最新データ（data.json）が見つかりませんでした。\nまだ公開していない場合は、先に「公開用データを書き出す」でGitHubにアップしてください。');
+    return;
+  }
+  if (!confirm(`サーバーの最新データ（${shared.rounds.length}ラウンド）に置き換えます。\nこの端末の現在のデータ（${state.rounds.length}ラウンド）は上書きされます。よろしいですか？`)) {
+    return;
+  }
+  state = shared;
+  saveState();
+  renderList();
+  showView('list');
+  toast('最新データを取得しました');
 }
 
 /* ---------- バックアップ（JSON） ---------- */
@@ -729,13 +790,23 @@ function toast(msg) {
 }
 
 /* ---------- 起動 ---------- */
-function init() {
+async function init() {
+  const hadLocal = !!localStorage.getItem(STORAGE_KEY);
   loadState();
+  // 初回アクセス時は、公開されている共有データ(data.json)があれば取り込む
+  if (!hadLocal) {
+    const shared = await fetchSharedData();
+    if (shared) {
+      state = shared;
+      saveState();
+    }
+  }
   renderList();
   showView('list');
 
   $('#fab').addEventListener('click', () => openEdit(null));
   $('#btn-settings').addEventListener('click', openSettings);
+  $('#btn-sync').addEventListener('click', pullSharedData);
   $('#range-tabs').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-range]');
     if (!btn) return;

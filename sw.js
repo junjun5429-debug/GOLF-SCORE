@@ -1,11 +1,12 @@
 /* ゴルフスコア管理 - Service Worker (オフライン対応) */
-const CACHE = 'golf-score-v4';
+const CACHE = 'golf-score-v6';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
   './manifest.webmanifest',
+  './data.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon-180.png',
@@ -26,6 +27,13 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+
+  // 共有データ(data.json)は常にネットワーク優先（最新を取得するため）
+  if (new URL(req.url).pathname.endsWith('/data.json') || req.url.includes('data.json')) {
+    event.respondWith(fetch(req).catch(() => caches.match(req)));
+    return;
+  }
+
   event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;
