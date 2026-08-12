@@ -589,6 +589,7 @@ function openSettings() {
 
   const gh = ghTarget();
   const ghToken = (loadGhConfig().token || '').trim();
+  const ghConfiguredNow = !!ghToken;
 
   $('#view-settings').innerHTML = `
     <div class="back-bar"><button id="s-back">‹ 一覧へ戻る</button></div>
@@ -607,16 +608,22 @@ function openSettings() {
       <div class="btn-row" style="margin-top:10px;"><button class="btn btn-secondary" id="s-pubdata">公開用データを書き出す</button></div>
       <div class="hint">入力担当の端末で「公開用データを書き出す」→ できた data.json をGitHubにアップ。ほかの端末は「最新データを取得」で同じ最新データに揃います。</div>
     </div>
-    <div class="section-title">自動同期（GitHub）</div>
-    <div class="form-card">
-      <div class="field"><label>GitHubユーザー名（owner）</label><input type="text" id="gh-owner" value="${gh.owner || ''}" autocomplete="off" /></div>
-      <div class="field"><label>リポジトリ名</label><input type="text" id="gh-repo" value="${gh.repo || ''}" autocomplete="off" /></div>
-      <div class="field"><label>ブランチ</label><input type="text" id="gh-branch" value="${gh.branch || 'main'}" autocomplete="off" /></div>
-      <div class="field"><label>ファイルパス</label><input type="text" id="gh-path" value="${gh.path || 'data.json'}" autocomplete="off" /></div>
-      <div class="field"><label>アクセストークン（Fine-grained PAT / Contents: Read and write）</label><input type="password" id="gh-token" value="${ghToken}" placeholder="github_pat_..." autocomplete="off" /></div>
-      <label class="check-row"><input type="checkbox" id="gh-autopush" ${gh.autoPush ? 'checked' : ''} /> 保存時に自動でサーバーへアップロードする</label>
-      <div class="btn-row"><button class="btn btn-secondary" id="gh-test">接続テスト</button></div>
-      <div class="hint">⚠️ トークンはこの端末のブラウザにのみ保存され、公開ファイルには含まれません。必ず「このリポジトリだけ・Contents: Read and write」に限定した Fine-grained トークンを使ってください。設定は入力担当の端末だけでOK（他の端末は🔄で取得のみ）。</div>
+    <div id="gh-reveal-wrap" class="${ghConfiguredNow ? 'hidden' : ''}" style="text-align:center;margin:6px 0 4px;">
+      <button id="gh-reveal" class="linklike">管理者向け設定（自動同期）を表示</button>
+    </div>
+    <div id="gh-section" class="${ghConfiguredNow ? '' : 'hidden'}">
+      <div class="section-title">自動同期（GitHub）</div>
+      <div class="form-card">
+        <div class="field"><label>GitHubユーザー名（owner）</label><input type="text" id="gh-owner" value="${gh.owner || ''}" autocomplete="off" /></div>
+        <div class="field"><label>リポジトリ名</label><input type="text" id="gh-repo" value="${gh.repo || ''}" autocomplete="off" /></div>
+        <div class="field"><label>ブランチ</label><input type="text" id="gh-branch" value="${gh.branch || 'main'}" autocomplete="off" /></div>
+        <div class="field"><label>ファイルパス</label><input type="text" id="gh-path" value="${gh.path || 'data.json'}" autocomplete="off" /></div>
+        <div class="field"><label>アクセストークン（Fine-grained PAT / Contents: Read and write）</label><input type="password" id="gh-token" value="${ghToken}" placeholder="github_pat_..." autocomplete="off" /></div>
+        <label class="check-row"><input type="checkbox" id="gh-autopush" ${gh.autoPush ? 'checked' : ''} /> 保存時に自動でサーバーへアップロードする</label>
+        <div class="btn-row"><button class="btn btn-secondary" id="gh-test">接続テスト</button></div>
+        <div class="btn-row" style="margin-top:10px;"><button class="btn btn-ghost" id="gh-clear">この端末の同期設定を削除</button></div>
+        <div class="hint">⚠️ トークンはこの端末のブラウザにのみ保存され、公開ファイルには含まれません。必ず「このリポジトリだけ・Contents: Read and write」に限定した Fine-grained トークンを使ってください。この欄は設定済みの端末にだけ表示されます。</div>
+      </div>
     </div>
     <div class="section-title">バックアップ / 引っ越し</div>
     <div class="form-card">
@@ -636,6 +643,23 @@ function openSettings() {
     </div>`;
 
   $('#s-back').addEventListener('click', () => showView('list'));
+  const ghReveal = $('#gh-reveal');
+  if (ghReveal) {
+    ghReveal.addEventListener('click', () => {
+      $('#gh-section').classList.remove('hidden');
+      $('#gh-reveal-wrap').classList.add('hidden');
+    });
+  }
+  const ghClear = $('#gh-clear');
+  if (ghClear) {
+    ghClear.addEventListener('click', () => {
+      if (confirm('この端末の自動同期設定（トークンを含む）を削除しますか？\nサーバーのデータは消えません。')) {
+        localStorage.removeItem(GH_KEY);
+        toast('同期設定を削除しました');
+        openSettings();
+      }
+    });
+  }
   $('#s-save').addEventListener('click', () => {
     const newNames = $$('#view-settings input[data-mi]').map((i) => i.value.trim() || 'メンバー');
     // 旧名 -> 新名 でプレイヤーキーを移行
@@ -648,14 +672,17 @@ function openSettings() {
     });
     state.members = newNames;
     state.defaultRate = num($('#s-rate').value) || DEFAULT_RATE;
-    saveGhConfig({
-      owner: $('#gh-owner').value.trim(),
-      repo: $('#gh-repo').value.trim(),
-      branch: $('#gh-branch').value.trim() || 'main',
-      path: $('#gh-path').value.trim() || 'data.json',
-      token: $('#gh-token').value.trim(),
-      autoPush: $('#gh-autopush').checked,
-    });
+    const ghSection = $('#gh-section');
+    if (ghSection && !ghSection.classList.contains('hidden')) {
+      saveGhConfig({
+        owner: $('#gh-owner').value.trim(),
+        repo: $('#gh-repo').value.trim(),
+        branch: $('#gh-branch').value.trim() || 'main',
+        path: $('#gh-path').value.trim() || 'data.json',
+        token: $('#gh-token').value.trim(),
+        autoPush: $('#gh-autopush').checked,
+      });
+    }
     saveState();
     renderList();
     showView('list');
