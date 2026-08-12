@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#1b7d3f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ゴルフスコア" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>ゴルフスコア管理</title>
+</head>
+<body>
+  <header class="app-header">
+    <h1>⛳ ゴルフスコア</h1>
+    <button id="btn-settings" class="icon-btn" aria-label="設定">⚙️</button>
+  </header>
+
+  <main id="app">
+    <!-- ラウンド一覧 -->
+    <section id="view-list" class="view">
+      <h2 class="stats-title">個人スコア <span class="muted">（全試合トータル平均）</span></h2>
+      <div class="stats-grid" id="stats-grid"></div>
+      <div class="chart-card">
+        <div class="chart-head">
+          <h2>スコア推移</h2>
+          <div class="legend" id="chart-legend"></div>
+        </div>
+        <div class="range-tabs" id="range-tabs">
+          <button type="button" data-range="5">直近5</button>
+          <button type="button" data-range="10">直近10</button>
+          <button type="button" data-range="20">直近20</button>
+          <button type="button" data-range="all">すべて</button>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="chart" height="220"></canvas>
+        </div>
+      </div>
+      <div class="list-head">
+        <h2>ラウンド履歴</h2>
+        <span id="round-count" class="muted"></span>
+      </div>
+      <ul id="round-list" class="round-list"></ul>
+    </section>
+
+    <!-- ラウンド詳細 -->
+    <section id="view-detail" class="view hidden"></section>
+
+    <!-- ラウンド入力 -->
+    <section id="view-edit" class="view hidden"></section>
+
+    <!-- 設定 -->
+    <section id="view-settings" class="view hidden"></section>
+  </main>
+
+  <button id="fab" class="fab" aria-label="ラウンドを追加">＋</button>
+
+  <script src="app.js"></script>
+</body>
+</html>
