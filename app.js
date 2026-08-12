@@ -577,11 +577,18 @@ function openSettings() {
     <div class="form-card">
       <div class="field"><input type="number" inputmode="numeric" id="s-rate" value="${state.defaultRate || DEFAULT_RATE}" /></div>
     </div>
+    <div class="section-title">バックアップ / 引っ越し</div>
+    <div class="form-card">
+      <div class="btn-row"><button class="btn btn-secondary" id="s-backup">バックアップを保存</button></div>
+      <div class="btn-row" style="margin-top:10px;"><button class="btn btn-secondary" id="s-restore">バックアップから復元</button></div>
+      <input type="file" id="s-restore-file" accept="application/json,.json" style="display:none" />
+      <div class="hint">別のURLや端末（PC↔iPhone）へデータを移すときに使います。移したい端末で「保存」→ 移す先で「復元」してください。</div>
+    </div>
     <div class="section-title">データ</div>
     <div class="form-card">
       <div class="btn-row"><button class="btn btn-secondary" id="s-export">CSVエクスポート</button></div>
       <div class="btn-row" style="margin-top:10px;"><button class="btn btn-ghost" id="s-reset">初期データに戻す</button></div>
-      <div class="hint">データはこの端末の中だけに保存されます。</div>
+      <div class="hint">データはこの端末・このURLの中だけに保存されます。</div>
     </div>
     <div class="btn-row" style="margin-top:16px;">
       <button class="btn btn-primary" id="s-save">保存</button>
@@ -606,6 +613,13 @@ function openSettings() {
     toast('設定を保存しました');
   });
   $('#s-export').addEventListener('click', exportCSV);
+  $('#s-backup').addEventListener('click', exportBackup);
+  $('#s-restore').addEventListener('click', () => $('#s-restore-file').click());
+  $('#s-restore-file').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) importBackup(file);
+    e.target.value = '';
+  });
   $('#s-reset').addEventListener('click', () => {
     if (confirm('すべてのデータを消して初期データ（Excel取り込み）に戻しますか？')) {
       state = buildSeedData();
@@ -617,6 +631,49 @@ function openSettings() {
   });
 
   showView('settings');
+}
+
+/* ---------- バックアップ（JSON） ---------- */
+function exportBackup() {
+  const payload = { app: 'golf-score-app', version: 1, exportedAt: new Date().toISOString(), data: state };
+  const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `golf-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast('バックアップを保存しました');
+}
+
+function importBackup(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      const data = parsed && parsed.data ? parsed.data : parsed;
+      if (!data || !Array.isArray(data.rounds) || !Array.isArray(data.members)) {
+        alert('このファイルはバックアップとして読み込めませんでした。');
+        return;
+      }
+      const msg = `バックアップを読み込みます。\n現在のデータ（${state.rounds.length}ラウンド）は、ファイルの内容（${data.rounds.length}ラウンド）に置き換わります。よろしいですか？`;
+      if (!confirm(msg)) return;
+      state = {
+        members: data.members,
+        defaultRate: data.defaultRate || DEFAULT_RATE,
+        rounds: data.rounds,
+      };
+      saveState();
+      renderList();
+      showView('list');
+      toast('復元しました');
+    } catch (err) {
+      alert('ファイルの読み込みに失敗しました。');
+    }
+  };
+  reader.readAsText(file);
 }
 
 /* ---------- CSV エクスポート ---------- */
