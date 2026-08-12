@@ -169,6 +169,9 @@ input, select {
 }
 input:focus, select:focus { outline:none; border-color: var(--green); }
 
+.check-row { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text); margin-bottom:12px; }
+.check-row input { width:auto; }
+
 .player-input-grid { overflow-x:auto; }
 table.pin { border-collapse: collapse; width:100%; min-width: 460px; }
 table.pin th, table.pin td { padding:8px 6px; text-align:center; border-bottom:1px solid var(--border); font-size:14px; }

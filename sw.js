@@ -1,5 +1,5 @@
 /* ゴルフスコア管理 - Service Worker (オフライン対応) */
-const CACHE = 'golf-score-v6';
+const CACHE = 'golf-score-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -27,9 +27,13 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+
+  // 外部API（GitHub等）はキャッシュせずそのままネットワークへ
+  if (url.origin !== location.origin) return;
 
   // 共有データ(data.json)は常にネットワーク優先（最新を取得するため）
-  if (new URL(req.url).pathname.endsWith('/data.json') || req.url.includes('data.json')) {
+  if (url.pathname.endsWith('data.json')) {
     event.respondWith(fetch(req).catch(() => caches.match(req)));
     return;
   }
