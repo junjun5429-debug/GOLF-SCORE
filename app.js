@@ -7,7 +7,9 @@
    ============================================================ */
 
 const STORAGE_KEY = 'golf-score-app:v1';
-const GH_KEY = 'golf-score-app:gh';
+const SUPABASE_URL = 'https://qqzrvdscnwdmpdrqdqtz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_KZgbYMI3wmd4KE2FVyW_Xg_TH04wI69';
+const SHARED_ROW_ID = 'golf-scorebook';
 const DEFAULT_MEMBERS = ['柴谷', '江田', '松田', '吉田'];
 const DEFAULT_RATE = 150;
 const MEMBER_COLORS = ['var(--p1)', 'var(--p2)', 'var(--p3)', 'var(--p4)'];
@@ -646,10 +648,6 @@ function openSettings() {
     )
     .join('');
 
-  const gh = ghTarget();
-  const ghToken = (loadGhConfig().token || '').trim();
-  const ghConfiguredNow = !!ghToken;
-
   $('#view-settings').innerHTML = `
     <div class="back-bar"><button id="s-back">‹ 一覧へ戻る</button></div>
     <div class="section-title">メンバー名</div>
@@ -661,22 +659,9 @@ function openSettings() {
     <div class="form-card">
       <div class="field"><input type="number" inputmode="numeric" id="s-rate" value="${state.defaultRate || DEFAULT_RATE}" /></div>
     </div>
-    <div id="gh-reveal-wrap" class="${ghConfiguredNow ? 'hidden' : ''}" style="text-align:center;margin:6px 0 4px;">
-      <button id="gh-reveal" class="linklike">管理者向け設定（自動同期）を表示</button>
-    </div>
-    <div id="gh-section" class="${ghConfiguredNow ? '' : 'hidden'}">
-      <div class="section-title">自動同期（GitHub）</div>
-      <div class="form-card">
-        <div class="field"><label>GitHubユーザー名（owner）</label><input type="text" id="gh-owner" value="${gh.owner || ''}" autocomplete="off" /></div>
-        <div class="field"><label>リポジトリ名</label><input type="text" id="gh-repo" value="${gh.repo || ''}" autocomplete="off" /></div>
-        <div class="field"><label>ブランチ</label><input type="text" id="gh-branch" value="${gh.branch || 'main'}" autocomplete="off" /></div>
-        <div class="field"><label>ファイルパス</label><input type="text" id="gh-path" value="${gh.path || 'data.json'}" autocomplete="off" /></div>
-        <div class="field"><label>アクセストークン（Fine-grained PAT / Contents: Read and write）</label><input type="password" id="gh-token" value="${ghToken}" placeholder="github_pat_..." autocomplete="off" /></div>
-        <label class="check-row"><input type="checkbox" id="gh-autopush" ${gh.autoPush ? 'checked' : ''} /> 保存時に自動でサーバーへアップロードする</label>
-        <div class="btn-row"><button class="btn btn-secondary" id="gh-test">接続テスト</button></div>
-        <div class="btn-row" style="margin-top:10px;"><button class="btn btn-ghost" id="gh-clear">この端末の同期設定を削除</button></div>
-        <div class="hint">⚠️ トークンはこの端末のブラウザにのみ保存され、公開ファイルには含まれません。必ず「このリポジトリだけ・Contents: Read and write」に限定した Fine-grained トークンを使ってください。この欄は設定済みの端末にだけ表示されます。</div>
-      </div>
+    <div class="section-title">同期について</div>
+    <div class="form-card">
+      <div class="hint">保存すると自動的にサーバー（共有）へ反映され、どの端末からでも右上の🔄で最新を取得できます。特別な設定は不要です。</div>
     </div>
     <div class="section-title">バックアップ / 引っ越し</div>
     <div class="form-card">
@@ -696,23 +681,6 @@ function openSettings() {
     </div>`;
 
   $('#s-back').addEventListener('click', () => showView('list'));
-  const ghReveal = $('#gh-reveal');
-  if (ghReveal) {
-    ghReveal.addEventListener('click', () => {
-      $('#gh-section').classList.remove('hidden');
-      $('#gh-reveal-wrap').classList.add('hidden');
-    });
-  }
-  const ghClear = $('#gh-clear');
-  if (ghClear) {
-    ghClear.addEventListener('click', () => {
-      if (confirm('この端末の自動同期設定（トークンを含む）を削除しますか？\nサーバーのデータは消えません。')) {
-        localStorage.removeItem(GH_KEY);
-        toast('同期設定を削除しました');
-        openSettings();
-      }
-    });
-  }
   $('#s-save').addEventListener('click', () => {
     const newNames = $$('#view-settings input[data-mi]').map((i) => i.value.trim() || 'メンバー');
     // 旧名 -> 新名 でプレイヤーキーを移行
@@ -726,43 +694,10 @@ function openSettings() {
     state.members = newNames;
     state.defaultRate = num($('#s-rate').value) || DEFAULT_RATE;
     selectedMembers = new Set(newNames);
-    const ghSection = $('#gh-section');
-    if (ghSection && !ghSection.classList.contains('hidden')) {
-      saveGhConfig({
-        owner: $('#gh-owner').value.trim(),
-        repo: $('#gh-repo').value.trim(),
-        branch: $('#gh-branch').value.trim() || 'main',
-        path: $('#gh-path').value.trim() || 'data.json',
-        token: $('#gh-token').value.trim(),
-        autoPush: $('#gh-autopush').checked,
-      });
-    }
     saveState();
     renderList();
     showView('list');
-    toast('設定を保存しました');
-  });
-  $('#gh-test').addEventListener('click', async () => {
-    const t = {
-      owner: $('#gh-owner').value.trim(),
-      repo: $('#gh-repo').value.trim(),
-      branch: $('#gh-branch').value.trim() || 'main',
-      path: $('#gh-path').value.trim() || 'data.json',
-      token: $('#gh-token').value.trim(),
-    };
-    if (!t.owner || !t.repo) {
-      alert('GitHubユーザー名とリポジトリ名を入力してください。');
-      return;
-    }
-    toast('接続を確認中…');
-    try {
-      const g = await ghGetContents(t);
-      const fileMsg = g && g.sha ? 'data.json を確認しました' : 'data.json は未作成です（保存時に作成されます）';
-      const tokenMsg = t.token ? 'トークンあり：保存も可能な見込みです。' : 'トークン未入力：取得のみ可能です。';
-      alert('接続OK。\n' + fileMsg + '\n' + tokenMsg);
-    } catch (e) {
-      alert('接続に失敗しました。ユーザー名／リポジトリ名／トークンを確認してください。\n' + e.message);
-    }
+    if (!autoPushIfEnabled()) toast('設定を保存しました');
   });
   $('#s-export').addEventListener('click', exportCSV);
   $('#s-backup').addEventListener('click', exportBackup);
@@ -785,36 +720,46 @@ function openSettings() {
   showView('settings');
 }
 
-/* ---------- 共有データ（data.json） ---------- */
-function normalizeSharedData(data) {
-  if (data && Array.isArray(data.rounds) && Array.isArray(data.members)) {
-    return { members: data.members, defaultRate: data.defaultRate || DEFAULT_RATE, rounds: data.rounds };
+/* ---------- 共有データ（Supabase） ---------- */
+function normalizeSharedData(value) {
+  const d = value && value.data ? value.data : value;
+  if (d && Array.isArray(d.rounds) && Array.isArray(d.members)) {
+    return { members: d.members, defaultRate: d.defaultRate || DEFAULT_RATE, rounds: d.rounds };
   }
   return null;
 }
 
-// GitHub API か 相対 data.json から最新の共有データを取得
+function supabaseHeaders() {
+  return {
+    apikey: SUPABASE_KEY,
+    Authorization: `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+  };
+}
+
+// Supabase（無ければ data.json）から最新の共有データを取得
 async function getSharedData() {
-  const t = ghTarget();
-  if (t.owner && t.repo) {
-    try {
-      const g = await ghGetContents(t);
-      if (g && g.data) {
-        const n = normalizeSharedData(g.data);
-        if (n) return n;
-      }
-    } catch (e) {
-      /* API不可のときは下のファイル取得にフォールバック */
-    }
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/shared_scores?id=eq.${encodeURIComponent(SHARED_ROW_ID)}&select=data`,
+      { headers: supabaseHeaders(), cache: 'no-store' }
+    );
+    if (!res.ok) throw new Error('read ' + res.status);
+    const rows = await res.json();
+    const shared = normalizeSharedData(rows[0] && rows[0].data);
+    if (shared) return shared;
+  } catch (e) {
+    console.error(e);
   }
   return await fetchSharedData();
 }
 
 // 最新の共有データを取得してこの端末を置き換える
 async function pullSharedData() {
+  toast('最新データを確認中…');
   const shared = await getSharedData();
   if (!shared) {
-    alert('最新データが見つかりませんでした。\nまだ公開していない場合は、先に「公開用データを書き出す」または自動同期の設定を行ってください。');
+    toast('共有データが見つかりませんでした');
     return;
   }
   const serverCount = shared.rounds.length;
@@ -834,125 +779,29 @@ async function pullSharedData() {
   toast('最新データを取得しました');
 }
 
-/* ---------- GitHub 自動同期 ---------- */
-function loadGhConfig() {
-  try {
-    return JSON.parse(localStorage.getItem(GH_KEY)) || {};
-  } catch (e) {
-    return {};
-  }
-}
-function saveGhConfig(cfg) {
-  localStorage.setItem(GH_KEY, JSON.stringify(cfg));
-}
-
-// GitHub Pages の URL から owner / repo を推定
-function deriveRepoFromLocation() {
-  const h = location.hostname;
-  if (!h.endsWith('.github.io')) return null;
-  const owner = h.replace('.github.io', '');
-  const seg = location.pathname.split('/').filter(Boolean);
-  const repo = seg.length ? seg[0] : `${owner}.github.io`;
-  return { owner, repo };
-}
-
-// 実際に使う接続情報（設定 > URL推定）
-function ghTarget() {
-  const cfg = loadGhConfig();
-  const d = deriveRepoFromLocation() || {};
-  return {
-    owner: (cfg.owner || d.owner || '').trim(),
-    repo: (cfg.repo || d.repo || '').trim(),
-    branch: (cfg.branch || 'main').trim(),
-    path: (cfg.path || 'data.json').trim(),
-    token: (cfg.token || '').trim(),
-    autoPush: !!cfg.autoPush,
-  };
-}
-
-function ghConfigured(t) {
-  t = t || ghTarget();
-  return !!(t.owner && t.repo && t.token);
-}
-
-// UTF-8 対応 Base64
-const b64encode = (str) => btoa(unescape(encodeURIComponent(str)));
-const b64decode = (b64) => decodeURIComponent(escape(atob((b64 || '').replace(/\s/g, ''))));
-
-async function ghGetContents(t) {
-  if (!t.owner || !t.repo) return null;
-  const url = `https://api.github.com/repos/${t.owner}/${t.repo}/contents/${encodeURIComponent(t.path)}?ref=${encodeURIComponent(t.branch)}&ts=${Date.now()}`;
-  const headers = { Accept: 'application/vnd.github+json' };
-  if (t.token) headers.Authorization = 'Bearer ' + t.token;
-  const res = await fetch(url, { headers, cache: 'no-store' });
-  if (res.status === 404) return { sha: null, data: null };
-  if (!res.ok) throw new Error('read ' + res.status);
-  const j = await res.json();
-  let parsed = null;
-  try {
-    const p = JSON.parse(b64decode(j.content));
-    parsed = p && p.data ? p.data : p;
-  } catch (e) {
-    parsed = null;
-  }
-  return { sha: j.sha, data: parsed };
-}
-
-async function ghPutContents(t, contentStr, sha, message) {
-  const url = `https://api.github.com/repos/${t.owner}/${t.repo}/contents/${encodeURIComponent(t.path)}`;
-  const body = { message, content: b64encode(contentStr), branch: t.branch };
-  if (sha) body.sha = sha;
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: 'Bearer ' + t.token,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error('write ' + res.status + ' ' + txt);
-  }
-  return res.json();
-}
-
-// 現在のデータをサーバー(data.json)へアップロード
+// 現在のデータを Supabase へアップロード（全端末で共有・設定不要）
 async function pushSharedData(silent) {
-  const t = ghTarget();
-  if (!ghConfigured(t)) {
-    if (!silent) alert('先に設定の「自動同期（GitHub）」でリポジトリとアクセストークンを入力してください。');
-    return false;
-  }
   try {
-    let sha = null;
-    try {
-      const cur = await ghGetContents(t);
-      sha = cur ? cur.sha : null;
-    } catch (e) {
-      sha = null;
-    }
-    const payload = { app: 'golf-score-app', version: 1, exportedAt: new Date().toISOString(), data: state };
-    await ghPutContents(t, JSON.stringify(payload, null, 1), sha, 'Update data.json from app');
-    if (!silent) toast('サーバーを更新しました');
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/shared_scores?on_conflict=id`, {
+      method: 'POST',
+      headers: { ...supabaseHeaders(), Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ id: SHARED_ROW_ID, data: state, updated_at: new Date().toISOString() }),
+    });
+    if (!res.ok) throw new Error('write ' + res.status);
+    if (!silent) toast('共有データを更新しました');
     return true;
   } catch (e) {
     console.error(e);
-    if (!silent) alert('GitHubへの保存に失敗しました。設定やトークン権限（Contents: Read and write）を確認してください。\n' + e.message);
+    if (!silent) toast('共有更新に失敗しました');
     return false;
   }
 }
 
-// 保存後に自動アップロード（設定がONのときのみ）
+// 保存後に自動で共有を更新（全端末共有・設定不要）
 function autoPushIfEnabled() {
-  const t = ghTarget();
-  if (t.autoPush && ghConfigured(t)) {
-    toast('保存しました（サーバー更新中…）');
-    pushSharedData(true).then((ok) => toast(ok ? 'サーバーを更新しました' : 'サーバー更新に失敗（設定を確認）'));
-    return true;
-  }
-  return false;
+  toast('保存しました（共有を更新中…）');
+  pushSharedData(true).then((ok) => toast(ok ? '共有データを更新しました' : '共有更新に失敗しました'));
+  return true;
 }
 
 /* ---------- バックアップ（JSON） ---------- */
