@@ -233,8 +233,31 @@ function roundHasSettlement(round) {
   );
 }
 
+/* ---------- 追加精算（飲み会の割り勘） ---------- */
+const NEARPIN_PENALTY = 2000;
+
+function roundHasDrink(round) {
+  return !!(round.drink && num(round.drink.total) > 0);
+}
+
+// 飲み代を計算。ニアピン負けの人は各 -2000 を追加負担し、その分を差し引いた額を人数で等分。
+function computeDrink(round) {
+  if (!roundHasDrink(round)) return null;
+  const total = num(round.drink.total);
+  const losers = (round.drink.nearpinLosers || []).filter((m) => state.members.includes(m));
+  const n = state.members.length;
+  const penaltyTotal = losers.length * NEARPIN_PENALTY;
+  const base = (total - penaltyTotal) / n; // 罰金分を引いた額を等分
+  const result = {};
+  state.members.forEach((m) => {
+    const penalty = losers.includes(m) ? NEARPIN_PENALTY : 0;
+    result[m] = { base, penalty, pay: base + penalty };
+  });
+  return { total, losers, base, result };
+}
+
 /* ---------- 画面遷移 ---------- */
-const views = ['list', 'detail', 'edit', 'settings'];
+const views = ['list', 'detail', 'edit', 'settings', 'drink'];
 function showView(name) {
   views.forEach((v) => $('#view-' + v).classList.toggle('hidden', v !== name));
   $('#fab').style.display = name === 'list' ? 'block' : 'none';
@@ -442,12 +465,13 @@ function renderRoundList(rounds) {
     const li = document.createElement('li');
     li.className = 'round-item';
     const settle = roundHasSettlement(r);
+    const drink = roundHasDrink(r);
     const scoresHtml = state.members
       .map((m) => `<div class="s">${m}<b>${num(r.players[m].score) || '-'}</b></div>`)
       .join('');
     li.innerHTML = `
       <div class="r-main">
-        <div class="r-date">${fmtDate(r.date)}${settle ? '<span class="badge">精算あり</span>' : ''}</div>
+        <div class="r-date">${fmtDate(r.date)}${settle ? '<span class="badge">精算あり</span>' : ''}${drink ? '<span class="badge badge-drink">飲み会</span>' : ''}</div>
         <div class="r-course">${r.course || 'コース未設定'}</div>
       </div>
       <div class="r-scores">${scoresHtml}</div>`;
@@ -503,6 +527,60 @@ function openDetail(id) {
       <div class="hint">レート ${c.rate}円 / 経費合計 ${Math.round(c.totalExpense).toLocaleString('ja-JP')}円 ・ オリンピック精算と経費精算の合計は 0 円になります。</div>`;
   }
 
+  // 追加精算（飲み会）
+  const drink = computeDrink(round);
+  let drinkHtml = '';
+  if (drink) {
+    const drows = members
+      .map((m) => {
+        const dr = drink.result[m];
+        const loser = drink.losers.includes(m);
+        return `<tr><td>${m}${loser ? '<span class="rank-pill">ニアピン負</span>' : ''}</td><td>${Math.round(dr.pay).toLocaleString('ja-JP')}円</td></tr>`;
+      })
+      .join('');
+    const afterPenalty = drink.total - drink.losers.length * NEARPIN_PENALTY;
+    let combineBlock = '';
+    if (hasSettle) {
+      const crows = members
+        .map((m) => {
+          const sc = c.result[m].total;
+          const pay = drink.result[m].pay;
+          const tot = sc - pay;
+          return `<tr><td>${m}</td><td class="${signClass(sc)}">${fmtYen(sc)}</td><td class="neg">${fmtYen(-pay)}</td><td class="${signClass(tot)}">${fmtYen(tot)}</td></tr>`;
+        })
+        .join('');
+      combineBlock = `
+      <label class="check-row" style="margin-top:12px;"><input type="checkbox" id="combine-toggle"> スコア精算と合算して表示</label>
+      <div id="combine-area" class="hidden">
+        <div class="result-wrap">
+          <table class="result-table">
+            <thead><tr><th>メンバー</th><th>スコア精算</th><th>飲み会</th><th>合計</th></tr></thead>
+            <tbody>${crows}</tbody>
+          </table>
+        </div>
+        <div class="hint">「合計」＝ オリンピック精算込 −（飲み会の負担額）。</div>
+      </div>`;
+    }
+    drinkHtml = `
+    <div class="section-title">追加精算（飲み会）</div>
+    <div class="result-wrap">
+      <table class="result-table">
+        <thead><tr><th>メンバー</th><th>負担額</th></tr></thead>
+        <tbody>${drows}</tbody>
+      </table>
+    </div>
+    <div class="hint">飲み代合計 ${Math.round(drink.total).toLocaleString('ja-JP')}円 ／ ニアピン負け ${drink.losers.length}人（各 −${NEARPIN_PENALTY.toLocaleString('ja-JP')}円）。差引 ${Math.round(afterPenalty).toLocaleString('ja-JP')}円 を ${members.length}人で等分し、負けた人は +${NEARPIN_PENALTY.toLocaleString('ja-JP')}円。</div>
+    <div class="btn-row" style="margin-top:10px;"><button class="btn btn-secondary" id="drink-edit">飲み会精算を編集</button></div>
+    ${combineBlock}`;
+  } else {
+    drinkHtml = `
+    <div class="section-title">追加精算（飲み会）</div>
+    <div class="form-card">
+      <div class="btn-row"><button class="btn btn-secondary" id="drink-add">飲み会の割り勘を追加</button></div>
+      <div class="hint">飲み代を入力し、ニアピン負けの2人を選ぶと割り勘を自動計算します。スコア精算とは独立です。</div>
+    </div>`;
+  }
+
   $('#view-detail').innerHTML = `
     <div class="back-bar"><button id="d-back">‹ 一覧へ戻る</button></div>
     <div class="detail-head">
@@ -517,6 +595,7 @@ function openDetail(id) {
       </table>
     </div>
     ${settleHtml}
+    ${drinkHtml}
     <div class="btn-row" style="margin-top:18px;">
       <button class="btn btn-secondary" id="d-edit">編集</button>
       <button class="btn btn-danger" id="d-delete">削除</button>
@@ -524,6 +603,17 @@ function openDetail(id) {
 
   $('#d-back').addEventListener('click', () => showView('list'));
   $('#d-edit').addEventListener('click', () => openEdit(round.id));
+  if (drink) {
+    $('#drink-edit').addEventListener('click', () => openDrinkEdit(round.id));
+    const toggle = $('#combine-toggle');
+    if (toggle) {
+      toggle.addEventListener('change', () => {
+        $('#combine-area').classList.toggle('hidden', !toggle.checked);
+      });
+    }
+  } else {
+    $('#drink-add').addEventListener('click', () => openDrinkEdit(round.id));
+  }
   $('#d-delete').addEventListener('click', () => {
     if (confirm('このラウンドを削除しますか？')) {
       state.rounds = state.rounds.filter((r) => r.id !== round.id);
@@ -535,6 +625,76 @@ function openDetail(id) {
   });
 
   showView('detail');
+}
+
+/* ---------- 追加精算（飲み会）入力画面 ---------- */
+function openDrinkEdit(id) {
+  const round = state.rounds.find((r) => r.id === id);
+  if (!round) return;
+  const d = round.drink || { total: '', nearpinLosers: [] };
+  const losers = d.nearpinLosers || [];
+  const memberChecks = state.members
+    .map(
+      (m) =>
+        `<label class="check-row"><input type="checkbox" data-loser="${m}" ${losers.includes(m) ? 'checked' : ''} /> ${m}</label>`
+    )
+    .join('');
+
+  $('#view-drink').innerHTML = `
+    <div class="back-bar"><button id="dk-back">‹ 戻る</button></div>
+    <div class="detail-head">
+      <div class="d-date">${fmtDate(round.date)}</div>
+      <div class="d-course">飲み会の割り勘</div>
+    </div>
+    <div class="form-card">
+      <div class="field">
+        <label>飲み代合計（円）</label>
+        <input type="number" inputmode="numeric" id="dk-total" value="${d.total ?? ''}" placeholder="例）40000" />
+      </div>
+      <div class="field">
+        <label>ニアピン負け（2人・各 −${NEARPIN_PENALTY.toLocaleString('ja-JP')}円）</label>
+        ${memberChecks}
+      </div>
+      <div class="hint">選んだ人は ${NEARPIN_PENALTY.toLocaleString('ja-JP')}円 を追加負担し、その分を合計から引いた額を ${state.members.length}人で等分します。</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="dk-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="dk-save">保存</button>
+    </div>
+    ${round.drink ? '<div class="btn-row" style="margin-top:10px;"><button class="btn btn-danger" id="dk-delete">飲み会精算を削除</button></div>' : ''}`;
+
+  $('#dk-back').addEventListener('click', () => openDetail(id));
+  $('#dk-cancel').addEventListener('click', () => openDetail(id));
+  $('#dk-save').addEventListener('click', () => {
+    const total = num($('#dk-total').value);
+    if (!total) {
+      alert('飲み代合計を入力してください。');
+      return;
+    }
+    const picked = $$('#view-drink input[data-loser]').filter((c) => c.checked).map((c) => c.dataset.loser);
+    if (picked.length > 2) {
+      alert('ニアピン負けは2人まで選べます。');
+      return;
+    }
+    round.drink = { total, nearpinLosers: picked };
+    saveState();
+    renderList();
+    openDetail(id);
+    if (!autoPushIfEnabled()) toast('飲み会精算を保存しました');
+  });
+  if (round.drink) {
+    $('#dk-delete').addEventListener('click', () => {
+      if (confirm('この飲み会精算を削除しますか？')) {
+        delete round.drink;
+        saveState();
+        renderList();
+        openDetail(id);
+        if (!autoPushIfEnabled()) toast('飲み会精算を削除しました');
+      }
+    });
+  }
+
+  showView('drink');
 }
 
 /* ---------- 入力画面 ---------- */
