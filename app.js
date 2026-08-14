@@ -10,6 +10,7 @@ const STORAGE_KEY = 'golf-score-app:v1';
 const SUPABASE_URL = 'https://qqzrvdscnwdmpdrqdqtz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_KZgbYMI3wmd4KE2FVyW_Xg_TH04wI69';
 const SHARED_ROW_ID = 'golf-scorebook';
+const COURSE_API = `${SUPABASE_URL}/functions/v1/course-search`;
 const DEFAULT_MEMBERS = ['柴谷', '江田', '松田', '吉田'];
 const DEFAULT_RATE = 150;
 const MEMBER_COLORS = ['var(--p1)', 'var(--p2)', 'var(--p3)', 'var(--p4)'];
@@ -23,6 +24,48 @@ const num = (v) => {
   return isNaN(n) ? 0 : n;
 };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+function normalizeCourseName(value) {
+  return String(value || '').normalize('NFKC').replace(/[\s　・･]/g, '').toLocaleLowerCase('ja');
+}
+
+function bindCourseSuggestions(inputSelector, listSelector, historyNames) {
+  const input = $(inputSelector);
+  const list = $(listSelector);
+  let timer = null;
+  let controller = null;
+
+  const matches = (name, query) => normalizeCourseName(name).includes(normalizeCourseName(query));
+  const render = (names) => {
+    list.replaceChildren(...[...new Set(names)].slice(0, 20).map((name) => {
+      const option = document.createElement('option');
+      option.value = name;
+      return option;
+    }));
+  };
+
+  input.addEventListener('input', () => {
+    window.clearTimeout(timer);
+    controller?.abort();
+    const query = input.value.trim();
+    const localNames = historyNames.filter((name) => matches(name, query));
+    render(localNames);
+    if (query.length < 2) return;
+
+    timer = window.setTimeout(async () => {
+      controller = new AbortController();
+      try {
+        const response = await fetch(`${COURSE_API}?keyword=${encodeURIComponent(query)}`, { signal: controller.signal });
+        const data = response.ok ? await response.json() : null;
+        if (input.value.trim() !== query) return;
+        const apiNames = (data?.courses || []).map((course) => course.name).filter((name) => matches(name, query));
+        render([...localNames, ...apiNames]);
+      } catch (error) {
+        if (error.name !== 'AbortError') render(localNames);
+      }
+    }, 400);
+  });
+}
 
 function excelSerialToISO(serial) {
   // Excel シリアル値(1900日付システム, 1899-12-30 基点) を ISO 日付へ
@@ -350,6 +393,7 @@ function openNextEdit() {
     </div>
     <div class="btn-row" style="margin-top:10px;"><button class="btn btn-ghost" id="nx-clear">未定にする（クリア）</button></div>`;
 
+  bindCourseSuggestions('#nx-course', '#course-list-nx', courseList);
   $('#nx-back').addEventListener('click', () => showView('list'));
   $('#nx-cancel').addEventListener('click', () => showView('list'));
   $('#nx-save').addEventListener('click', () => {
@@ -891,6 +935,7 @@ function openEdit(id) {
       <button class="btn btn-primary" id="e-save">保存</button>
     </div>`;
 
+  bindCourseSuggestions('#e-course', '#course-list', courseList);
   const back = () => (isNew ? showView('list') : openDetail(id));
   $('#e-back').addEventListener('click', back);
   $('#e-cancel').addEventListener('click', back);
