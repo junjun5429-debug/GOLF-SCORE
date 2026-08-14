@@ -26,6 +26,7 @@
   <main id="app">
     <!-- ラウンド一覧 -->
     <section id="view-list" class="view">
+      <div id="next-round"></div>
       <div id="latest-round"></div>
       <h2 class="stats-title">個人アベレージ <span class="muted">（全試合トータル）</span></h2>
       <div class="stats-grid" id="stats-grid"></div>
@@ -62,6 +63,9 @@
 
     <!-- 追加精算（飲み会） -->
     <section id="view-drink" class="view hidden"></section>
+
+    <!-- 次回ラウンド編集 -->
+    <section id="view-next" class="view hidden"></section>
   </main>
 
   <button id="fab" class="fab" aria-label="ラウンドを追加">＋</button>

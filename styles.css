@@ -61,6 +61,27 @@ main { padding: 16px 16px 96px; max-width: 720px; margin: 0 auto; }
 h2 { font-size: 17px; margin: 0 0 10px; }
 .muted { color: var(--muted); font-size: 13px; }
 
+/* next round */
+.next-card {
+  position: relative;
+  background: var(--green-light);
+  border: 1px dashed var(--green);
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+.next-card.complete { border-style: solid; }
+.next-card .nr-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.next-card .nr-label { font-size:12px; font-weight:700; color:var(--green-dark); }
+.next-card .nr-edit { font-size:12px; color:var(--green); }
+.next-card .nr-date { font-size:17px; font-weight:800; color:var(--text); }
+.next-card .nr-time { margin-left: 16px; }
+.next-card .nr-tent { margin-left:12px; font-size:12px; font-weight:600; color:var(--muted); }
+.next-card .nr-start { margin-left:16px; font-size:12px; font-weight:700; background:var(--green); color:#fff; padding:2px 9px; border-radius:999px; vertical-align:middle; }
+.next-card .nr-course { font-size:13px; color:var(--muted); margin-top:2px; }
+
 /* latest round */
 .latest-card {
   position: relative;

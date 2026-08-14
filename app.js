@@ -129,7 +129,7 @@ function buildSeedData() {
     });
   }
 
-  return { members, defaultRate: DEFAULT_RATE, rounds };
+  return { members, defaultRate: DEFAULT_RATE, rounds, nextRound: null };
 }
 
 /* ---------- ストレージ ---------- */
@@ -177,6 +177,7 @@ async function fetchSharedData() {
         members: data.members,
         defaultRate: data.defaultRate || DEFAULT_RATE,
         rounds: data.rounds,
+        nextRound: data.nextRound || null,
       };
     }
   } catch (e) {
@@ -267,7 +268,7 @@ function computeDrink(round) {
 }
 
 /* ---------- 画面遷移 ---------- */
-const views = ['list', 'detail', 'edit', 'settings', 'drink'];
+const views = ['list', 'detail', 'edit', 'settings', 'drink', 'next'];
 function showView(name) {
   views.forEach((v) => $('#view-' + v).classList.toggle('hidden', v !== name));
   $('#fab').style.display = name === 'list' ? 'block' : 'none';
@@ -277,11 +278,101 @@ function showView(name) {
 /* ---------- 一覧画面 ---------- */
 function renderList() {
   const rounds = sortedRounds();
+  renderNextRound();
   renderLatest(rounds);
   renderStats(rounds);
   renderRangeTabs();
   renderChart(rounds);
   renderRoundList(rounds);
+}
+
+function renderNextRound() {
+  const el = $('#next-round');
+  if (!el) return;
+  const nr = state.nextRound || null;
+  const hasInfo = nr && (nr.date || nr.month || nr.course || nr.time || nr.start);
+  const hasWhen = nr && (nr.date || nr.month);
+  // 確定(実線)＝ 場所・スタート・日程あり。正確な日付なら時刻も必要、月のみなら時刻は任意。
+  const complete = !!(nr && hasWhen && nr.course && nr.start && (nr.date ? nr.time : true));
+  let body;
+  if (hasInfo) {
+    let whenStr;
+    if (nr.date) {
+      whenStr = `${fmtDate(nr.date)}${nr.time ? `<span class="nr-time">${nr.time}</span>` : ''}`;
+    } else if (nr.month) {
+      const [y, m] = nr.month.split('-');
+      whenStr = `${y}年${Number(m)}月<span class="nr-tent">日程調整中</span>${nr.time ? `<span class="nr-time">${nr.time}</span>` : ''}`;
+    } else {
+      whenStr = '日時未定';
+    }
+    const startBadge = nr.start ? `<span class="nr-start">${nr.start}スタート</span>` : '';
+    const place = nr.course ? nr.course : '場所未定';
+    body = `<div class="nr-date">${whenStr}${startBadge}</div><div class="nr-course">${place}</div>`;
+  } else {
+    body = `<div class="nr-date">未定</div><div class="nr-course">タップして予定を入力</div>`;
+  }
+  el.innerHTML = `
+    <div class="next-card${complete ? ' complete' : ''}">
+      <div class="nr-head"><span class="nr-label">🗓 次回ラウンド</span><span class="nr-edit">編集 ›</span></div>
+      ${body}
+    </div>`;
+  el.onclick = () => openNextEdit();
+}
+
+function openNextEdit() {
+  const nr = state.nextRound || { date: '', month: '', time: '', course: '', start: '' };
+  const courseList = [...new Set(state.rounds.map((r) => r.course).filter(Boolean))];
+  $('#view-next').innerHTML = `
+    <div class="back-bar"><button id="nx-back">‹ 戻る</button></div>
+    <div class="section-title">次回ラウンドの予定</div>
+    <div class="form-card">
+      <div class="field"><label>日付（決まっていれば）</label><input type="date" id="nx-date" value="${nr.date || ''}" /></div>
+      <div class="field"><label>月のみ（日付が未定のとき）</label><input type="month" id="nx-month" value="${nr.month || ''}" /></div>
+      <div class="field"><label>時刻（任意）</label><input type="time" id="nx-time" value="${nr.time || ''}" /></div>
+      <div class="field">
+        <label>スタート</label>
+        <select id="nx-start">
+          <option value="" ${!nr.start ? 'selected' : ''}>未選択</option>
+          <option value="OUT" ${nr.start === 'OUT' ? 'selected' : ''}>OUTスタート</option>
+          <option value="IN" ${nr.start === 'IN' ? 'selected' : ''}>INスタート</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>場所（未定なら空欄）</label>
+        <input type="text" id="nx-course" list="course-list-nx" value="${nr.course || ''}" placeholder="例）大月ガーデンゴルフクラブ" />
+        <datalist id="course-list-nx">${courseList.map((c) => `<option value="${c}">`).join('')}</datalist>
+      </div>
+      <div class="hint">正確な日付が未定なら「月のみ」でOK（例：2026年11月）。日付を入れると月のみ設定より優先されます。日程・時刻・スタート・場所がそろうと枠が実線になります（月のみの場合は時刻なしでも実線）。</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="nx-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="nx-save">保存</button>
+    </div>
+    <div class="btn-row" style="margin-top:10px;"><button class="btn btn-ghost" id="nx-clear">未定にする（クリア）</button></div>`;
+
+  $('#nx-back').addEventListener('click', () => showView('list'));
+  $('#nx-cancel').addEventListener('click', () => showView('list'));
+  $('#nx-save').addEventListener('click', () => {
+    const date = $('#nx-date').value;
+    const month = date ? '' : $('#nx-month').value; // 日付があれば月のみは無効
+    const time = $('#nx-time').value;
+    const course = $('#nx-course').value.trim();
+    const start = $('#nx-start').value;
+    state.nextRound = date || month || time || course || start ? { date, month, time, course, start } : null;
+    saveState();
+    renderList();
+    showView('list');
+    if (!autoPushIfEnabled()) toast('次回ラウンドを保存しました');
+  });
+  $('#nx-clear').addEventListener('click', () => {
+    state.nextRound = null;
+    saveState();
+    renderList();
+    showView('list');
+    if (!autoPushIfEnabled()) toast('未定にしました');
+  });
+
+  showView('next');
 }
 
 function renderLatest(rounds) {
@@ -916,7 +1007,7 @@ function openSettings() {
 function normalizeSharedData(value) {
   const d = value && value.data ? value.data : value;
   if (d && Array.isArray(d.rounds) && Array.isArray(d.members)) {
-    return { members: d.members, defaultRate: d.defaultRate || DEFAULT_RATE, rounds: d.rounds };
+    return { members: d.members, defaultRate: d.defaultRate || DEFAULT_RATE, rounds: d.rounds, nextRound: d.nextRound || null };
   }
   return null;
 }
@@ -955,7 +1046,7 @@ async function pullSharedData() {
     return;
   }
   // 内容が同一なら更新しない（削除・編集も差分として検知するため件数ではなく内容で比較）
-  const sig = (s) => JSON.stringify({ m: s.members, d: s.defaultRate || DEFAULT_RATE, r: s.rounds });
+  const sig = (s) => JSON.stringify({ m: s.members, d: s.defaultRate || DEFAULT_RATE, r: s.rounds, n: s.nextRound || null });
   if (sig(state) === sig(shared)) {
     toast(`すでに最新です（${shared.rounds.length}ラウンド）`);
     return;
