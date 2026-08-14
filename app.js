@@ -449,12 +449,18 @@ function renderChart(rounds) {
     .join('');
 
   const canvas = $('#chart');
+  const rectW = Math.round(canvas.getBoundingClientRect().width) || canvas.clientWidth || 0;
+  // レイアウト未確定（幅0）のときは次フレームで描き直す（初回のぼやけ防止）
+  if (rectW < 2) {
+    requestAnimationFrame(() => renderChart(rounds));
+    return;
+  }
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
-  const cssW = canvas.clientWidth || 320;
+  const cssW = rectW;
   const cssH = 220;
-  canvas.width = cssW * dpr;
-  canvas.height = cssH * dpr;
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssW, cssH);
 
@@ -1214,6 +1220,23 @@ async function init() {
   window.addEventListener('resize', () => {
     if (!$('#view-list').classList.contains('hidden')) renderChart(sortedRounds());
   });
+  // レイアウト確定・フォント読み込み後の再描画（初回のぼやけ防止）
+  window.addEventListener('load', () => {
+    if (!$('#view-list').classList.contains('hidden')) renderChart(sortedRounds());
+  });
+  if (window.ResizeObserver) {
+    const chartWrap = document.querySelector('.chart-wrap');
+    if (chartWrap) {
+      let roTimer = null;
+      const ro = new ResizeObserver(() => {
+        clearTimeout(roTimer);
+        roTimer = setTimeout(() => {
+          if (!$('#view-list').classList.contains('hidden')) renderChart(sortedRounds());
+        }, 50);
+      });
+      ro.observe(chartWrap);
+    }
+  }
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
