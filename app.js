@@ -499,6 +499,12 @@ function openDetail(id) {
   const hasSettle = roundHasSettlement(round);
   const hasPrev = members.some((m) => round.players[m].prev != null && round.players[m].prev !== '');
 
+  // 前後のラウンド（日付順）
+  const ordered = sortedRounds();
+  const curIdx = ordered.findIndex((r) => r.id === round.id);
+  const olderRound = curIdx > 0 ? ordered[curIdx - 1] : null;
+  const newerRound = curIdx >= 0 && curIdx < ordered.length - 1 ? ordered[curIdx + 1] : null;
+
   const scoreRows = members
     .map((m) => {
       const pl = round.players[m];
@@ -593,7 +599,11 @@ function openDetail(id) {
   }
 
   $('#view-detail').innerHTML = `
-    <div class="back-bar"><button id="d-back">‹ 一覧へ戻る</button></div>
+    <div class="detail-nav">
+      <button class="nav-btn" id="d-prev" ${olderRound ? '' : 'disabled'}>‹ 前のラウンド</button>
+      <button class="nav-btn" id="d-back">一覧</button>
+      <button class="nav-btn" id="d-next" ${newerRound ? '' : 'disabled'}>次のラウンド ›</button>
+    </div>
     <div class="detail-head">
       <div class="d-date">${fmtDate(round.date)}</div>
       <div class="d-course">${round.course || 'コース未設定'}</div>
@@ -613,6 +623,8 @@ function openDetail(id) {
     </div>`;
 
   $('#d-back').addEventListener('click', () => showView('list'));
+  if (olderRound) $('#d-prev').addEventListener('click', () => openDetail(olderRound.id));
+  if (newerRound) $('#d-next').addEventListener('click', () => openDetail(newerRound.id));
   $('#d-edit').addEventListener('click', () => openEdit(round.id));
   if (drink) {
     $('#drink-edit').addEventListener('click', () => openDrinkEdit(round.id));

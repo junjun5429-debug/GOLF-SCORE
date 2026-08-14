@@ -259,6 +259,22 @@ button.btn {
 .back-bar { display:flex; align-items:center; gap:8px; margin-bottom:14px; }
 .back-bar button { background:none; border:none; color:var(--green); font-size:16px; cursor:pointer; padding:4px 0; font-weight:600; }
 
+.detail-nav { display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+.detail-nav .nav-btn {
+  flex:1;
+  background:var(--card);
+  border:1px solid var(--border);
+  color:var(--green);
+  font-size:14px;
+  font-weight:600;
+  cursor:pointer;
+  padding:9px 6px;
+  border-radius:10px;
+  white-space:nowrap;
+}
+.detail-nav .nav-btn:disabled { color:var(--muted); opacity:0.5; cursor:default; }
+.detail-nav .nav-btn:active:not(:disabled) { background:#eef1ef; }
+
 /* detail */
 .detail-head { background: var(--card); border-radius:16px; padding:16px; box-shadow: var(--shadow); margin-bottom:16px; }
 .detail-head .d-date { font-size:20px; font-weight:700; }
