@@ -119,6 +119,16 @@ function buildSeedData() {
     players: lrPlayers,
   });
 
+  // 前回スコアを直前ラウンドから補完（未設定のラウンドのみ）
+  for (let i = 1; i < rounds.length; i++) {
+    const prevRound = rounds[i - 1];
+    members.forEach((m) => {
+      if (rounds[i].players[m].prev == null) {
+        rounds[i].players[m].prev = prevRound.players[m].score;
+      }
+    });
+  }
+
   return { members, defaultRate: DEFAULT_RATE, rounds };
 }
 
@@ -487,6 +497,7 @@ function openDetail(id) {
   const c = computeSettlement(round);
   const members = state.members;
   const hasSettle = roundHasSettlement(round);
+  const hasPrev = members.some((m) => round.players[m].prev != null && round.players[m].prev !== '');
 
   const scoreRows = members
     .map((m) => {
@@ -496,7 +507,7 @@ function openDetail(id) {
         <td>${num(pl.score) || '-'}</td>
         <td>${pl.prev != null && pl.prev !== '' ? pl.prev : '-'}</td>
         <td>${c.result[m].net >= 0 ? '+' : ''}${c.result[m].net || 0}</td>
-        <td>${hasSettle ? c.result[m].rank + '位' : '-'}</td>
+        <td>${hasSettle || hasPrev ? c.result[m].rank + '位' : '-'}</td>
       </tr>`;
     })
     .join('');
