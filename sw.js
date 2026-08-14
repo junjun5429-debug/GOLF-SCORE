@@ -1,5 +1,5 @@
 /* ゴルフスコア管理 - Service Worker (オフライン対応) */
-const CACHE = 'golf-score-v18';
+const CACHE = 'golf-score-v19';
 const ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,8 @@ const ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon-180.png',
+  './icons/favicon-32.png',
+  './icons/favicon-16.png',
 ];
 
 self.addEventListener('install', (event) => {
