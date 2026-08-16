@@ -11,6 +11,9 @@ const SUPABASE_URL = 'https://qqzrvdscnwdmpdrqdqtz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_KZgbYMI3wmd4KE2FVyW_Xg_TH04wI69';
 const SHARED_ROW_ID = 'golf-scorebook';
 const COURSE_API = `${SUPABASE_URL}/functions/v1/course-search`;
+const RAKUTEN_ATTRIBUTION = `<!-- Rakuten Web Services Attribution Snippet FROM HERE -->
+<a href="https://developers.rakuten.com/" target="_blank">Supported by Rakuten Developers</a>
+<!-- Rakuten Web Services Attribution Snippet TO HERE -->`;
 const DEFAULT_MEMBERS = ['柴谷', '江田', '松田', '吉田'];
 const DEFAULT_RATE = 150;
 const MEMBER_COLORS = ['var(--p1)', 'var(--p2)', 'var(--p3)', 'var(--p4)'];
@@ -34,15 +37,68 @@ function bindCourseSuggestions(inputSelector, listSelector, historyNames) {
   const list = $(listSelector);
   let timer = null;
   let controller = null;
+  let activeIndex = -1;
 
   const matches = (name, query) => normalizeCourseName(name).includes(normalizeCourseName(query));
-  const render = (names) => {
-    list.replaceChildren(...[...new Set(names)].slice(0, 20).map((name) => {
-      const option = document.createElement('option');
-      option.value = name;
-      return option;
-    }));
+  const close = () => {
+    list.hidden = true;
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+    activeIndex = -1;
   };
+  const select = (name) => {
+    input.value = name;
+    close();
+    input.focus();
+  };
+  const setActive = (index) => {
+    const options = [...list.querySelectorAll('.course-option')];
+    if (!options.length) return;
+    activeIndex = (index + options.length) % options.length;
+    options.forEach((option, optionIndex) => {
+      const active = optionIndex === activeIndex;
+      option.classList.toggle('active', active);
+      option.setAttribute('aria-selected', String(active));
+    });
+    input.setAttribute('aria-activedescendant', options[activeIndex].id);
+    options[activeIndex].scrollIntoView({ block: 'nearest' });
+  };
+  const render = (names) => {
+    const uniqueNames = [...new Set(names)].slice(0, 20);
+    if (!uniqueNames.length) {
+      list.replaceChildren();
+      close();
+      return;
+    }
+
+    const optionList = document.createElement('div');
+    optionList.className = 'course-option-list';
+    uniqueNames.forEach((name, index) => {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.id = `${list.id}-option-${index}`;
+      option.className = 'course-option';
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', 'false');
+      option.textContent = name;
+      option.addEventListener('mousedown', (event) => event.preventDefault());
+      option.addEventListener('click', () => select(name));
+      optionList.appendChild(option);
+    });
+
+    const credit = document.createElement('div');
+    credit.className = 'rakuten-credit';
+    credit.innerHTML = RAKUTEN_ATTRIBUTION;
+    list.replaceChildren(optionList, credit);
+    list.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    activeIndex = -1;
+  };
+
+  input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-autocomplete', 'list');
+  input.setAttribute('aria-controls', list.id);
+  input.setAttribute('aria-expanded', 'false');
 
   input.addEventListener('input', () => {
     window.clearTimeout(timer);
@@ -65,6 +121,28 @@ function bindCourseSuggestions(inputSelector, listSelector, historyNames) {
       }
     }, 400);
   });
+  input.addEventListener('focus', () => {
+    const query = input.value.trim();
+    render(historyNames.filter((name) => matches(name, query)));
+  });
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      close();
+      return;
+    }
+    if (event.key === 'Enter' && activeIndex >= 0) {
+      event.preventDefault();
+      select(list.querySelectorAll('.course-option')[activeIndex].textContent);
+      return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      const options = list.querySelectorAll('.course-option');
+      if (!options.length) return;
+      event.preventDefault();
+      setActive(activeIndex + (event.key === 'ArrowDown' ? 1 : -1));
+    }
+  });
+  input.addEventListener('blur', () => window.setTimeout(close, 120));
 }
 
 function excelSerialToISO(serial) {
@@ -383,8 +461,10 @@ function openNextEdit() {
       </div>
       <div class="field">
         <label>場所（未定なら空欄）</label>
-        <input type="text" id="nx-course" list="course-list-nx" value="${nr.course || ''}" placeholder="例）大月ガーデンゴルフクラブ" />
-        <datalist id="course-list-nx">${courseList.map((c) => `<option value="${c}">`).join('')}</datalist>
+        <div class="course-search">
+          <input type="text" id="nx-course" value="${nr.course || ''}" placeholder="例）大月ガーデンゴルフクラブ" autocomplete="off" />
+          <div id="course-list-nx" class="course-suggestions" role="listbox" hidden></div>
+        </div>
       </div>
       <div class="hint">正確な日付が未定なら「月のみ」でOK（例：2026年11月）。日付を入れると月のみ設定より優先されます。日程・時刻・スタート・場所がそろうと枠が実線になります（月のみの場合は時刻なしでも実線）。</div>
     </div>
@@ -945,8 +1025,10 @@ function openEdit(id) {
       </div>
       <div class="field">
         <label>コース名</label>
-        <input type="text" id="e-course" list="course-list" value="${round.course || ''}" placeholder="例）大月ガーデンゴルフクラブ" />
-        <datalist id="course-list">${courseList.map((c) => `<option value="${c}">`).join('')}</datalist>
+        <div class="course-search">
+          <input type="text" id="e-course" value="${round.course || ''}" placeholder="例）大月ガーデンゴルフクラブ" autocomplete="off" />
+          <div id="course-list" class="course-suggestions" role="listbox" hidden></div>
+        </div>
       </div>
       <div class="field">
         <label>オリンピック レート（円）</label>

@@ -228,6 +228,38 @@ canvas { width:100%; height:220px; display:block; }
 .form-card { background: var(--card); border-radius:16px; padding:16px; box-shadow: var(--shadow); margin-bottom:16px; }
 .field { margin-bottom: 14px; }
 .field label { display:block; font-size:13px; color: var(--muted); margin-bottom:6px; }
+.course-search { position: relative; }
+.course-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.14);
+}
+.course-suggestions[hidden] { display: none; }
+.course-option-list { max-height: 220px; overflow-y: auto; }
+.course-option {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.course-option:hover, .course-option.active { background: var(--green-light); }
+.rakuten-credit { padding: 8px 12px; background: #fafafa; font-size: 10px; color: var(--muted); }
+.rakuten-credit a { color: var(--muted); }
 input, select {
   width:100%;
   padding:12px;
