@@ -178,6 +178,12 @@ canvas { width:100%; height:220px; display:block; }
   color:#fff;
   border-color: var(--green);
 }
+.range-tabs .trendline-btn {
+  flex: 0 0 auto;
+  padding-inline: 10px;
+  border-style: dashed;
+}
+.range-tabs .trendline-btn.active { border-style: solid; }
 
 /* list */
 .list-head { display:flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }

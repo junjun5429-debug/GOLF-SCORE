@@ -179,6 +179,7 @@ function buildSeedData() {
 let state = null;
 let chartRange = 'all'; // '5' | '10' | '20' | 'all'
 let selectedMembers = null; // グラフに表示するメンバー（Set）。null は全員表示
+let showTrendlines = false;
 
 function ensureSelection() {
   if (!selectedMembers) {
@@ -446,6 +447,9 @@ function renderRangeTabs() {
   $$('#range-tabs button').forEach((b) => {
     b.classList.toggle('active', b.dataset.range === chartRange);
   });
+  const trendlineButton = $('#btn-trendline');
+  trendlineButton.classList.toggle('active', showTrendlines);
+  trendlineButton.setAttribute('aria-pressed', String(showTrendlines));
 }
 
 function renderStats(rounds) {
@@ -576,30 +580,59 @@ function renderChart(rounds) {
   // 各メンバーの折れ線（選択されたメンバーのみ）
   shown.forEach((m) => {
     const mi = state.members.indexOf(m);
-    ctx.strokeStyle = MEMBER_HEX[mi % 4];
-    ctx.fillStyle = MEMBER_HEX[mi % 4];
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    let started = false;
-    withScore.forEach((r, i) => {
-      const s = num(r.players[m].score);
-      if (s <= 0) return;
-      const x = xFor(i), y = yFor(s);
-      if (!started) {
-        ctx.moveTo(x, y);
-        started = true;
-      } else {
-        ctx.lineTo(x, y);
-      }
-    });
-    ctx.stroke();
-    withScore.forEach((r, i) => {
-      const s = num(r.players[m].score);
-      if (s <= 0) return;
+    if (!showTrendlines) {
+      ctx.strokeStyle = MEMBER_HEX[mi % 4];
+      ctx.fillStyle = MEMBER_HEX[mi % 4];
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(xFor(i), yFor(s), 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    });
+      let started = false;
+      withScore.forEach((r, i) => {
+        const s = num(r.players[m].score);
+        if (s <= 0) return;
+        const x = xFor(i), y = yFor(s);
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+      withScore.forEach((r, i) => {
+        const s = num(r.players[m].score);
+        if (s <= 0) return;
+        ctx.beginPath();
+        ctx.arc(xFor(i), yFor(s), 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    if (showTrendlines) {
+      const points = withScore
+        .map((r, i) => ({ x: i, y: num(r.players[m].score) }))
+        .filter((point) => point.y > 0);
+      if (points.length >= 2) {
+        const meanX = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+        const meanY = points.reduce((sum, point) => sum + point.y, 0) / points.length;
+        const denominator = points.reduce((sum, point) => sum + (point.x - meanX) ** 2, 0);
+        const slope = denominator
+          ? points.reduce((sum, point) => sum + (point.x - meanX) * (point.y - meanY), 0) / denominator
+          : 0;
+        const intercept = meanY - slope * meanX;
+        const firstX = points[0].x;
+        const lastX = points[points.length - 1].x;
+
+        ctx.save();
+        ctx.strokeStyle = MEMBER_HEX[mi % 4];
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(xFor(firstX), yFor(intercept + slope * firstX));
+        ctx.lineTo(xFor(lastX), yFor(intercept + slope * lastX));
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
   });
 }
 
@@ -1255,6 +1288,13 @@ async function init() {
     showView('list');
   });
   $('#range-tabs').addEventListener('click', (e) => {
+    const trendlineButton = e.target.closest('#btn-trendline');
+    if (trendlineButton) {
+      showTrendlines = !showTrendlines;
+      renderRangeTabs();
+      renderChart(sortedRounds());
+      return;
+    }
     const btn = e.target.closest('button[data-range]');
     if (!btn) return;
     chartRange = btn.dataset.range;
