@@ -11,9 +11,6 @@ const SUPABASE_URL = 'https://qqzrvdscnwdmpdrqdqtz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_KZgbYMI3wmd4KE2FVyW_Xg_TH04wI69';
 const SHARED_ROW_ID = 'golf-scorebook';
 const COURSE_API = `${SUPABASE_URL}/functions/v1/course-search`;
-const RAKUTEN_ATTRIBUTION = `<!-- Rakuten Web Services Attribution Snippet FROM HERE -->
-<a href="https://developers.rakuten.com/" target="_blank">Supported by Rakuten Developers</a>
-<!-- Rakuten Web Services Attribution Snippet TO HERE -->`;
 const DEFAULT_MEMBERS = ['柴谷', '江田', '松田', '吉田'];
 const DEFAULT_RATE = 150;
 const MEMBER_COLORS = ['var(--p1)', 'var(--p2)', 'var(--p3)', 'var(--p4)'];
@@ -37,68 +34,15 @@ function bindCourseSuggestions(inputSelector, listSelector, historyNames) {
   const list = $(listSelector);
   let timer = null;
   let controller = null;
-  let activeIndex = -1;
 
   const matches = (name, query) => normalizeCourseName(name).includes(normalizeCourseName(query));
-  const close = () => {
-    list.hidden = true;
-    input.setAttribute('aria-expanded', 'false');
-    input.removeAttribute('aria-activedescendant');
-    activeIndex = -1;
-  };
-  const select = (name) => {
-    input.value = name;
-    close();
-    input.focus();
-  };
-  const setActive = (index) => {
-    const options = [...list.querySelectorAll('.course-option')];
-    if (!options.length) return;
-    activeIndex = (index + options.length) % options.length;
-    options.forEach((option, optionIndex) => {
-      const active = optionIndex === activeIndex;
-      option.classList.toggle('active', active);
-      option.setAttribute('aria-selected', String(active));
-    });
-    input.setAttribute('aria-activedescendant', options[activeIndex].id);
-    options[activeIndex].scrollIntoView({ block: 'nearest' });
-  };
   const render = (names) => {
-    const uniqueNames = [...new Set(names)].slice(0, 20);
-    if (!uniqueNames.length) {
-      list.replaceChildren();
-      close();
-      return;
-    }
-
-    const optionList = document.createElement('div');
-    optionList.className = 'course-option-list';
-    uniqueNames.forEach((name, index) => {
-      const option = document.createElement('button');
-      option.type = 'button';
-      option.id = `${list.id}-option-${index}`;
-      option.className = 'course-option';
-      option.setAttribute('role', 'option');
-      option.setAttribute('aria-selected', 'false');
-      option.textContent = name;
-      option.addEventListener('mousedown', (event) => event.preventDefault());
-      option.addEventListener('click', () => select(name));
-      optionList.appendChild(option);
-    });
-
-    const credit = document.createElement('div');
-    credit.className = 'rakuten-credit';
-    credit.innerHTML = RAKUTEN_ATTRIBUTION;
-    list.replaceChildren(optionList, credit);
-    list.hidden = false;
-    input.setAttribute('aria-expanded', 'true');
-    activeIndex = -1;
+    list.replaceChildren(...[...new Set(names)].slice(0, 20).map((name) => {
+      const option = document.createElement('option');
+      option.value = name;
+      return option;
+    }));
   };
-
-  input.setAttribute('role', 'combobox');
-  input.setAttribute('aria-autocomplete', 'list');
-  input.setAttribute('aria-controls', list.id);
-  input.setAttribute('aria-expanded', 'false');
 
   input.addEventListener('input', () => {
     window.clearTimeout(timer);
@@ -121,28 +65,6 @@ function bindCourseSuggestions(inputSelector, listSelector, historyNames) {
       }
     }, 400);
   });
-  input.addEventListener('focus', () => {
-    const query = input.value.trim();
-    render(historyNames.filter((name) => matches(name, query)));
-  });
-  input.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      close();
-      return;
-    }
-    if (event.key === 'Enter' && activeIndex >= 0) {
-      event.preventDefault();
-      select(list.querySelectorAll('.course-option')[activeIndex].textContent);
-      return;
-    }
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      const options = list.querySelectorAll('.course-option');
-      if (!options.length) return;
-      event.preventDefault();
-      setActive(activeIndex + (event.key === 'ArrowDown' ? 1 : -1));
-    }
-  });
-  input.addEventListener('blur', () => window.setTimeout(close, 120));
 }
 
 function excelSerialToISO(serial) {
@@ -257,7 +179,6 @@ function buildSeedData() {
 let state = null;
 let chartRange = 'all'; // '5' | '10' | '20' | 'all'
 let selectedMembers = null; // グラフに表示するメンバー（Set）。null は全員表示
-let showTrendlines = false;
 
 function ensureSelection() {
   if (!selectedMembers) {
@@ -461,10 +382,8 @@ function openNextEdit() {
       </div>
       <div class="field">
         <label>場所（未定なら空欄）</label>
-        <div class="course-search">
-          <input type="text" id="nx-course" value="${nr.course || ''}" placeholder="例）大月ガーデンゴルフクラブ" autocomplete="off" />
-          <div id="course-list-nx" class="course-suggestions" role="listbox" hidden></div>
-        </div>
+        <input type="text" id="nx-course" list="course-list-nx" value="${nr.course || ''}" placeholder="例）大月ガーデンゴルフクラブ" />
+        <datalist id="course-list-nx">${courseList.map((c) => `<option value="${c}">`).join('')}</datalist>
       </div>
       <div class="hint">正確な日付が未定なら「月のみ」でOK（例：2026年11月）。日付を入れると月のみ設定より優先されます。日程・時刻・スタート・場所がそろうと枠が実線になります（月のみの場合は時刻なしでも実線）。</div>
     </div>
@@ -527,9 +446,6 @@ function renderRangeTabs() {
   $$('#range-tabs button').forEach((b) => {
     b.classList.toggle('active', b.dataset.range === chartRange);
   });
-  const trendlineButton = $('#btn-trendline');
-  trendlineButton.classList.toggle('active', showTrendlines);
-  trendlineButton.setAttribute('aria-pressed', String(showTrendlines));
 }
 
 function renderStats(rounds) {
@@ -660,59 +576,30 @@ function renderChart(rounds) {
   // 各メンバーの折れ線（選択されたメンバーのみ）
   shown.forEach((m) => {
     const mi = state.members.indexOf(m);
-    if (!showTrendlines) {
-      ctx.strokeStyle = MEMBER_HEX[mi % 4];
-      ctx.fillStyle = MEMBER_HEX[mi % 4];
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      let started = false;
-      withScore.forEach((r, i) => {
-        const s = num(r.players[m].score);
-        if (s <= 0) return;
-        const x = xFor(i), y = yFor(s);
-        if (!started) {
-          ctx.moveTo(x, y);
-          started = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
-      });
-      ctx.stroke();
-      withScore.forEach((r, i) => {
-        const s = num(r.players[m].score);
-        if (s <= 0) return;
-        ctx.beginPath();
-        ctx.arc(xFor(i), yFor(s), 2.5, 0, Math.PI * 2);
-        ctx.fill();
-      });
-    }
-
-    if (showTrendlines) {
-      const points = withScore
-        .map((r, i) => ({ x: i, y: num(r.players[m].score) }))
-        .filter((point) => point.y > 0);
-      if (points.length >= 2) {
-        const meanX = points.reduce((sum, point) => sum + point.x, 0) / points.length;
-        const meanY = points.reduce((sum, point) => sum + point.y, 0) / points.length;
-        const denominator = points.reduce((sum, point) => sum + (point.x - meanX) ** 2, 0);
-        const slope = denominator
-          ? points.reduce((sum, point) => sum + (point.x - meanX) * (point.y - meanY), 0) / denominator
-          : 0;
-        const intercept = meanY - slope * meanX;
-        const firstX = points[0].x;
-        const lastX = points[points.length - 1].x;
-
-        ctx.save();
-        ctx.strokeStyle = MEMBER_HEX[mi % 4];
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 4]);
-        ctx.beginPath();
-        ctx.moveTo(xFor(firstX), yFor(intercept + slope * firstX));
-        ctx.lineTo(xFor(lastX), yFor(intercept + slope * lastX));
-        ctx.stroke();
-        ctx.restore();
+    ctx.strokeStyle = MEMBER_HEX[mi % 4];
+    ctx.fillStyle = MEMBER_HEX[mi % 4];
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let started = false;
+    withScore.forEach((r, i) => {
+      const s = num(r.players[m].score);
+      if (s <= 0) return;
+      const x = xFor(i), y = yFor(s);
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else {
+        ctx.lineTo(x, y);
       }
-    }
+    });
+    ctx.stroke();
+    withScore.forEach((r, i) => {
+      const s = num(r.players[m].score);
+      if (s <= 0) return;
+      ctx.beginPath();
+      ctx.arc(xFor(i), yFor(s), 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
   });
 }
 
@@ -1025,10 +912,8 @@ function openEdit(id) {
       </div>
       <div class="field">
         <label>コース名</label>
-        <div class="course-search">
-          <input type="text" id="e-course" value="${round.course || ''}" placeholder="例）大月ガーデンゴルフクラブ" autocomplete="off" />
-          <div id="course-list" class="course-suggestions" role="listbox" hidden></div>
-        </div>
+        <input type="text" id="e-course" list="course-list" value="${round.course || ''}" placeholder="例）大月ガーデンゴルフクラブ" />
+        <datalist id="course-list">${courseList.map((c) => `<option value="${c}">`).join('')}</datalist>
       </div>
       <div class="field">
         <label>オリンピック レート（円）</label>
@@ -1370,13 +1255,6 @@ async function init() {
     showView('list');
   });
   $('#range-tabs').addEventListener('click', (e) => {
-    const trendlineButton = e.target.closest('#btn-trendline');
-    if (trendlineButton) {
-      showTrendlines = !showTrendlines;
-      renderRangeTabs();
-      renderChart(sortedRounds());
-      return;
-    }
     const btn = e.target.closest('button[data-range]');
     if (!btn) return;
     chartRange = btn.dataset.range;
