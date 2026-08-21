@@ -376,7 +376,7 @@ function renderCourseViewer() {
             : '<div class="viewer-layout-message"><strong>レイアウト情報がありません</strong></div>';
     stage = `<div class="viewer-selected-layout"><header><div><span>COURSE LAYOUT</span><h2>${escapeHtml(layout?.name || selectedCourse.name)}</h2><p>${escapeHtml(layout?.courseName || selectedCourse.address)}</p></div><button id="viewer-change-course" type="button">ゴルフ場を変更</button></header>${holeNavigation}<div class="viewer-layout-frame-wrap">${content}</div></div>`;
   }
-  target.innerHTML = `<div class="course-viewer-head"><button id="course-view-back" type="button">← 一覧へ戻る</button><div><span>FAIRWAY SCOPE</span><h2>ゴルフ場検索</h2></div></div>
+  target.innerHTML = `<div class="course-viewer-head"><button id="course-view-back" type="button">← ダッシュボードへ戻る</button><div><span>FAIRWAY SCOPE</span><h2>ゴルフ場検索</h2></div></div>
     <div class="course-viewer-workspace${selectedCourse ? ' has-selection' : ''}">
       <aside class="course-viewer-sidebar"><form id="viewer-search-form"><label for="viewer-search">ゴルフ場名</label><div><input id="viewer-search" value="${escapeHtml(courseViewerState.query)}" placeholder="例: 武蔵丘" autocomplete="off"><button type="submit" ${loading ? 'disabled' : ''}>検索</button></div></form><p class="viewer-search-message">${escapeHtml(message)}</p><div class="viewer-results">${results}</div></aside>
       <section class="course-viewer-stage">${stage}</section>
