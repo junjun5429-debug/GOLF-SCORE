@@ -15,6 +15,17 @@ const DEFAULT_MEMBERS = ['柴谷', '江田', '松田', '吉田'];
 const DEFAULT_RATE = 150;
 const MEMBER_COLORS = ['var(--p1)', 'var(--p2)', 'var(--p3)', 'var(--p4)'];
 const MEMBER_HEX = ['#1b7d3f', '#2f6fd8', '#e08a1e', '#9b3fc0'];
+let courseViewerState = {
+  query: '',
+  courses: [],
+  selectedCourse: null,
+  layout: null,
+  holes: [],
+  selectedHole: null,
+  loading: false,
+  message: 'ゴルフ場名を入力して検索してください。',
+  error: '',
+};
 
 /* ---------- ユーティリティ ---------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -24,6 +35,18 @@ const num = (v) => {
   return isNaN(n) ? 0 : n;
 };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const escapeHtml = (value) => String(value ?? '')
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#039;');
+
+function courseViewerApi(action, courseId, parameters = {}) {
+  const query = new URLSearchParams({ action, ...parameters });
+  if (courseId) query.set('courseId', courseId);
+  return `${COURSE_API}?${query}`;
+}
 
 function normalizeCourseName(value) {
   return String(value || '').normalize('NFKC').replace(/[\s　・･]/g, '').toLocaleLowerCase('ja');
@@ -311,11 +334,117 @@ function computeDrink(round) {
 }
 
 /* ---------- 画面遷移 ---------- */
-const views = ['list', 'detail', 'edit', 'settings', 'drink', 'next'];
+const views = ['list', 'detail', 'edit', 'settings', 'drink', 'next', 'course'];
 function showView(name) {
   views.forEach((v) => $('#view-' + v).classList.toggle('hidden', v !== name));
   $('#fab').style.display = name === 'list' ? 'block' : 'none';
   window.scrollTo(0, 0);
+}
+
+function renderCourseViewer() {
+  const target = $('#view-course');
+  const holeSelectorScrollLeft = $('.viewer-hole-selector', target)?.scrollLeft ?? 0;
+  const { courses, selectedCourse, layout, holes, selectedHole, loading, message, error } = courseViewerState;
+  const courseIndexes = [...new Set(holes.map((hole) => hole.courseIndex))];
+  const courseNames = layout?.courseName?.split(/[・,、/]/).map((name) => name.trim()).filter(Boolean) || [];
+  const results = courses.length
+    ? courses.map((course) => `<button class="viewer-course-result${selectedCourse?.id === course.id ? ' selected' : ''}" type="button" data-viewer-course="${escapeHtml(course.id)}">
+        ${course.imageUrl ? `<img src="${escapeHtml(course.imageUrl)}" alt="" />` : '<span class="viewer-course-fallback">⛳</span>'}
+        <span><strong>${escapeHtml(course.name)}</strong><small>${escapeHtml(course.address)}</small></span>
+      </button>`).join('')
+    : '<div class="viewer-sidebar-empty">検索結果がここに表示されます</div>';
+  const holeNavigation = holes.length
+    ? `<nav class="viewer-hole-selector" aria-label="ホール選択">${courseIndexes.map((courseIndex) => `<div class="viewer-hole-group"><span>${escapeHtml(courseNames[courseIndex] || `コース ${courseIndex + 1}`)}</span><div>${holes.filter((hole) => hole.courseIndex === courseIndex).map((hole) => {
+        const displayNumber = courseIndex * 9 + hole.holeNumber;
+        const isSelected = selectedHole?.courseIndex === courseIndex && selectedHole?.holeNumber === hole.holeNumber;
+        return `<button type="button" class="${isSelected ? 'selected' : ''}" data-viewer-hole="${courseIndex}:${hole.holeNumber}" aria-pressed="${isSelected}">${displayNumber}</button>`;
+      }).join('')}</div></div>`).join('')}</nav>`
+    : '';
+  let stage = '<div class="viewer-empty-layout"><span>⌖</span><h2>コース図を選択</h2><p>ゴルフ場を検索し、一覧から選択すると<br>コースレイアウトを表示します。</p></div>';
+  if (selectedCourse) {
+    const stats = selectedHole
+      ? `<dl class="viewer-hole-stats"><div><dt>PAR</dt><dd>${selectedHole.par ?? '-'}</dd></div><div><dt>HDCP</dt><dd>${selectedHole.handicap ?? '-'}</dd></div>${(selectedHole.yards || []).map((yard) => `<div><dt>${escapeHtml(yard.tee)}</dt><dd>${yard.value}Y</dd></div>`).join('')}</dl>`
+      : '';
+    const content = loading
+      ? '<div class="viewer-layout-message"><span class="viewer-spinner">↻</span><strong>コース図を読み込んでいます</strong></div>'
+      : error
+        ? `<div class="viewer-layout-message"><span>⌖</span><strong>コース図を表示できません</strong><small>${escapeHtml(error)}</small></div>`
+        : selectedHole
+          ? `<figure class="viewer-hole-layout"><figcaption><div><strong>${escapeHtml(selectedHole.courseName || courseNames[selectedHole.courseIndex] || `コース ${selectedHole.courseIndex + 1}`)}</strong><span>${selectedHole.courseIndex * 9 + selectedHole.holeNumber} 番ホール</span></div>${stats}</figcaption><div class="viewer-hole-image"><img src="${escapeHtml(selectedHole.imageUrl)}" alt="${escapeHtml(selectedCourse.name)} ${selectedHole.courseIndex * 9 + selectedHole.holeNumber}番ホール レイアウト図"></div></figure>`
+          : layout?.layoutUrl
+            ? `<iframe class="viewer-layout-frame" sandbox="" src="${escapeHtml(courseViewerApi('layout-page', selectedCourse.id))}" title="${escapeHtml(selectedCourse.name)} コースレイアウト"></iframe>`
+            : '<div class="viewer-layout-message"><strong>レイアウト情報がありません</strong></div>';
+    stage = `<div class="viewer-selected-layout"><header><div><span>COURSE LAYOUT</span><h2>${escapeHtml(layout?.name || selectedCourse.name)}</h2><p>${escapeHtml(layout?.courseName || selectedCourse.address)}</p></div><button id="viewer-change-course" type="button">ゴルフ場を変更</button></header>${holeNavigation}<div class="viewer-layout-frame-wrap">${content}</div></div>`;
+  }
+  target.innerHTML = `<div class="course-viewer-head"><button id="course-view-back" type="button">← 一覧へ戻る</button><div><span>FAIRWAY SCOPE</span><h2>ゴルフ場検索</h2></div></div>
+    <div class="course-viewer-workspace${selectedCourse ? ' has-selection' : ''}">
+      <aside class="course-viewer-sidebar"><form id="viewer-search-form"><label for="viewer-search">ゴルフ場名</label><div><input id="viewer-search" value="${escapeHtml(courseViewerState.query)}" placeholder="例: 武蔵丘" autocomplete="off"><button type="submit" ${loading ? 'disabled' : ''}>検索</button></div></form><p class="viewer-search-message">${escapeHtml(message)}</p><div class="viewer-results">${results}</div></aside>
+      <section class="course-viewer-stage">${stage}</section>
+    </div>`;
+  const holeSelector = $('.viewer-hole-selector', target);
+  if (holeSelector) holeSelector.scrollLeft = holeSelectorScrollLeft;
+  $('#course-view-back').addEventListener('click', () => showView('list'));
+  $('#viewer-search-form').addEventListener('submit', searchViewerCourses);
+  $$('[data-viewer-course]', target).forEach((button) => button.addEventListener('click', () => chooseViewerCourse(button.dataset.viewerCourse)));
+  $$('[data-viewer-hole]', target).forEach((button) => button.addEventListener('click', () => {
+    const [courseIndex, holeNumber] = button.dataset.viewerHole.split(':').map(Number);
+    courseViewerState.selectedHole = holes.find((hole) => hole.courseIndex === courseIndex && hole.holeNumber === holeNumber) || null;
+    renderCourseViewer();
+  }));
+  $('#viewer-change-course')?.addEventListener('click', () => {
+    Object.assign(courseViewerState, { selectedCourse: null, layout: null, holes: [], selectedHole: null, error: '' });
+    renderCourseViewer();
+  });
+}
+
+async function searchViewerCourses(event) {
+  event.preventDefault();
+  const query = $('#viewer-search').value.trim();
+  if (query.length < 2) {
+    courseViewerState.message = 'ゴルフ場名を 2 文字以上入力してください。';
+    renderCourseViewer();
+    return;
+  }
+  Object.assign(courseViewerState, { query, loading: true, message: '検索しています...', error: '' });
+  renderCourseViewer();
+  try {
+    const response = await fetch(courseViewerApi('courses', null, { keyword: query }));
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || '検索に失敗しました。');
+    courseViewerState.courses = data.courses || [];
+    courseViewerState.message = courseViewerState.courses.length ? `${courseViewerState.courses.length} 件見つかりました。` : '該当するゴルフ場がありません。';
+  } catch (error) {
+    courseViewerState.courses = [];
+    courseViewerState.message = error.message || '検索に失敗しました。';
+  } finally {
+    courseViewerState.loading = false;
+    renderCourseViewer();
+  }
+}
+
+async function chooseViewerCourse(courseId) {
+  const course = courseViewerState.courses.find((item) => item.id === courseId);
+  if (!course) return;
+  Object.assign(courseViewerState, { selectedCourse: course, layout: null, holes: [], selectedHole: null, loading: true, error: '' });
+  renderCourseViewer();
+  try {
+    const [layoutResponse, holesResponse] = await Promise.all([
+      fetch(courseViewerApi('layout', course.id)),
+      fetch(courseViewerApi('holes', course.id)),
+    ]);
+    const layoutData = await layoutResponse.json();
+    const holeData = await holesResponse.json();
+    if (!layoutResponse.ok) throw new Error(layoutData.error || 'コース図を取得できませんでした。');
+    courseViewerState.layout = layoutData;
+    courseViewerState.holes = holesResponse.ok ? holeData.holes || [] : [];
+    courseViewerState.selectedHole = courseViewerState.holes[0] || null;
+    if (!courseViewerState.selectedHole && !layoutData.layoutUrl) courseViewerState.error = holeData.error || 'レイアウトが登録されていません。';
+  } catch (error) {
+    courseViewerState.error = error.message || 'コース図を取得できませんでした。';
+  } finally {
+    courseViewerState.loading = false;
+    renderCourseViewer();
+  }
 }
 
 /* ---------- 一覧画面 ---------- */
@@ -1250,6 +1379,10 @@ async function init() {
   $('#fab').addEventListener('click', () => openEdit(null));
   $('#btn-settings').addEventListener('click', openSettings);
   $('#btn-sync').addEventListener('click', pullSharedData);
+  $('#btn-course-viewer').addEventListener('click', () => {
+    renderCourseViewer();
+    showView('course');
+  });
   $('#app-title').addEventListener('click', () => {
     renderList();
     showView('list');

@@ -11,12 +11,13 @@
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=19" />
   <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=19" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=26" />
   <title>ゴルフぐるーぶ</title>
 </head>
 <body>
   <header class="app-header">
     <h1 id="app-title">⛳ ゴルフぐるーぶ</h1>
+    <button id="btn-course-viewer" class="header-course-btn" type="button">⌕ ゴルフ場検索</button>
     <div class="header-actions">
       <button id="btn-sync" class="icon-btn" aria-label="最新データを取得">🔄</button>
       <button id="btn-settings" class="icon-btn" aria-label="設定">⚙️</button>
@@ -66,10 +67,13 @@
 
     <!-- 次回ラウンド編集 -->
     <section id="view-next" class="view hidden"></section>
+
+    <!-- ゴルフ場検索 -->
+    <section id="view-course" class="view hidden"></section>
   </main>
 
   <button id="fab" class="fab" aria-label="ラウンドを追加">＋</button>
 
-  <script src="app.js?v=24"></script>
+  <script src="app.js?v=25"></script>
 </body>
 </html>
