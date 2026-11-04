@@ -1,12 +1,12 @@
 /* ゴルフスコア管理 - Service Worker (オフライン対応) */
-const CACHE = 'golf-score-v29';
+const CACHE = 'golf-score-v30';
 const ASSETS = [
   './',
   './index.html',
   './styles.css?v=26',
-  './app.js?v=28',
+  './app.js?v=29',
   './firebase-config.js?v=1',
-  './firebase-store.js?v=1',
+  './firebase-store.js?v=2',
   './manifest.webmanifest',
   './data.json',
   './icons/icon-192.png',

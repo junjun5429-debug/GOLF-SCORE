@@ -153,7 +153,7 @@
           throw failure("exists", "Firebase に共有データがあるため、移行を中止しました。[最新データを取得] で確認してください。");
         }
         if (!createOnly && !current) {
-          throw failure("empty", "Firebase にまだ共有データがありません。設定の [共有 DB] から初回移行を実行してください。");
+          throw failure("empty", "Firebase に共有データがありません。端末のバックアップを保存し、管理者に復旧を依頼してください。");
         }
         if (!createOnly && (!merge || replace) && expectedRevision() !== current.revision) {
           throw failure("conflict", "別の端末の更新、または未取得の共有データがあります。端末のバックアップを保存し、[最新データを取得] で確認してください。");
@@ -191,59 +191,8 @@
       return enqueue(() => writeFirebase(data, { createOnly: true, replace: true }));
     }
 
-    function mountSettings(container, { getLocalData, onApplied, notify }) {
-      container.replaceChildren();
-      const heading = document.createElement("h3");
-      heading.textContent = "共有 DB";
-      const status = document.createElement("p");
-      status.setAttribute("role", "status");
-      status.textContent = isFirebase() ? "共有先: Firebase（ログイン不要）" : "共有先: Supabase（移行前）。Firebase の接続情報は管理者が設定します。";
-      container.append(heading, status);
-      if (!isFirebase()) return;
-
-      const note = document.createElement("p");
-      note.textContent = "このアプリにアクセスできる人は誰でも共有データを読み書きできます。第三者による閲覧・改変や利用枠の消費を防ぐ制限はありません。初回移行前には全端末のバックアップを保存し、旧アプリでの編集を止めてください。";
-      container.append(note);
-      function button(label, action) {
-        const element = document.createElement("button");
-        element.type = "button";
-        element.className = "btn btn-secondary secondary";
-        element.textContent = label;
-        element.addEventListener("click", async () => {
-          element.disabled = true;
-          try {
-            await action();
-          } catch (error) {
-            console.error("Shared database operation failed", error);
-            status.textContent = errorMessage(error);
-            notify(errorMessage(error));
-          } finally {
-            element.disabled = false;
-          }
-        });
-        container.append(element);
-        return element;
-      }
-      async function importData(source, label) {
-        if (!source) throw failure("empty", "移行元の共有データがありません。バックアップからの復元を確認してください。");
-        const count = source.sessions?.length ?? source.rounds?.length ?? 0;
-        if (!window.confirm(`${label}の記録 ${count} 件を Firebase に初回移行します。バックアップは保存しましたか？\nFirebase にデータがある場合は上書きしません。`)) return;
-        const imported = await migrate(source);
-        onApplied(imported);
-        status.textContent = "Firebase への初回移行が完了しました。他の端末は [最新データを取得] を実行してください。";
-        notify("Firebase への初回移行が完了しました。");
-      }
-      button("Supabase から初回移行", async () => importData(await readLegacy(), "Supabase"));
-      button("この端末から初回移行", async () => importData(valid(getLocalData()), "この端末"));
-      backend().catch((error) => {
-        console.error("Firebase initialization failed", error);
-        status.textContent = errorMessage(error);
-        notify(errorMessage(error));
-      });
-    }
-
     expectedRevision();
-    return { isFirebase, read, write, accept, mountSettings, readLegacy, migrate, errorMessage };
+    return { isFirebase, read, write, accept, readLegacy, migrate, errorMessage };
   }
 
   window.ScorebookDatabase = Object.freeze({ create, errorMessage });

@@ -1158,7 +1158,6 @@ function openSettings() {
     <div class="section-title">同期について</div>
     <div class="form-card">
       <div class="hint">保存すると共有 DB を更新します。別の端末では右上の🔄で最新を取得してください。Firebase の競合時は、端末のバックアップを保存してから最新データを確認してください。</div>
-      <div id="shared-database-settings"></div>
     </div>
     <div class="section-title">バックアップ / 引っ越し</div>
     <div class="form-card">
@@ -1214,16 +1213,6 @@ function openSettings() {
     }
   });
 
-  sharedDatabase.mountSettings($('#shared-database-settings'), {
-    getLocalData: () => state,
-    onApplied: (data) => {
-      state = data;
-      selectedMembers = new Set(state.members);
-      saveState();
-      renderList();
-    },
-    notify: toast,
-  });
   showView('settings');
 }
 
@@ -1254,7 +1243,7 @@ async function pullSharedData() {
     return;
   }
   if (!shared) {
-    toast('共有データがありません。設定の [共有 DB] で初回移行を確認してください。');
+    toast('共有データが見つかりません。管理者に接続先とデータの確認を依頼してください。');
     return;
   }
   // 内容が同一なら更新しない（削除・編集も差分として検知するため件数ではなく内容で比較）
