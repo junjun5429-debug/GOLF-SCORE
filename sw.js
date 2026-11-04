@@ -1,10 +1,12 @@
 /* ゴルフスコア管理 - Service Worker (オフライン対応) */
-const CACHE = 'golf-score-v28';
+const CACHE = 'golf-score-v29';
 const ASSETS = [
   './',
   './index.html',
   './styles.css?v=26',
-  './app.js?v=27',
+  './app.js?v=28',
+  './firebase-config.js?v=1',
+  './firebase-store.js?v=1',
   './manifest.webmanifest',
   './data.json',
   './icons/icon-192.png',
@@ -21,7 +23,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k.startsWith('golf-score-') && k !== CACHE).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
@@ -33,6 +35,21 @@ self.addEventListener('fetch', (event) => {
 
   // 外部API（GitHub等）はキャッシュせずそのままネットワークへ
   if (url.origin !== location.origin) return;
+
+  if (url.pathname.endsWith('/firebase-config.js')) {
+    event.respondWith(
+      fetch(req).then((response) => {
+        if (!response.ok) throw new Error(`Firebase configuration HTTP ${response.status}`);
+        const copy = response.clone();
+        event.waitUntil(caches.open(CACHE).then((cache) => cache.put(req, copy)));
+        return response;
+      }).catch((error) => caches.match(req).then((cached) => {
+        if (cached) return cached;
+        throw error;
+      }))
+    );
+    return;
+  }
 
   // 共有データ(data.json)は常にネットワーク優先（最新を取得するため）
   if (url.pathname.endsWith('data.json')) {

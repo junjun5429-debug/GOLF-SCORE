@@ -8,8 +8,8 @@
 
 const STORAGE_KEY = 'golf-score-app:v1';
 const SUPABASE_URL = 'https://qqzrvdscnwdmpdrqdqtz.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_KZgbYMI3wmd4KE2FVyW_Xg_TH04wI69';
 const SHARED_ROW_ID = 'golf-scorebook';
+const sharedDatabase = window.ScorebookDatabase.create({ id: SHARED_ROW_ID, normalize: normalizeSharedData });
 const COURSE_API = `${SUPABASE_URL}/functions/v1/course-search`;
 const DEFAULT_MEMBERS = ['柴谷', '江田', '松田', '吉田'];
 const DEFAULT_RATE = 150;
@@ -1157,7 +1157,8 @@ function openSettings() {
     </div>
     <div class="section-title">同期について</div>
     <div class="form-card">
-      <div class="hint">保存すると自動的にサーバー（共有）へ反映され、どの端末からでも右上の🔄で最新を取得できます。特別な設定は不要です。</div>
+      <div class="hint">保存すると共有 DB を更新します。別の端末では右上の🔄で最新を取得してください。Firebase の競合時は、端末のバックアップを保存してから最新データを確認してください。</div>
+      <div id="shared-database-settings"></div>
     </div>
     <div class="section-title">バックアップ / 引っ越し</div>
     <div class="form-card">
@@ -1170,7 +1171,7 @@ function openSettings() {
     <div class="form-card">
       <div class="btn-row"><button class="btn btn-secondary" id="s-export">CSVエクスポート</button></div>
       <div class="btn-row" style="margin-top:10px;"><button class="btn btn-ghost" id="s-reset">初期データに戻す</button></div>
-      <div class="hint">データはこの端末・このURLの中だけに保存されます。</div>
+      <div class="hint">初期化はこの端末内のデータだけを変更します。その後の保存操作は共有 DB にも反映されます。</div>
     </div>
     <div class="btn-row" style="margin-top:16px;">
       <button class="btn btn-primary" id="s-save">保存</button>
@@ -1213,10 +1214,20 @@ function openSettings() {
     }
   });
 
+  sharedDatabase.mountSettings($('#shared-database-settings'), {
+    getLocalData: () => state,
+    onApplied: (data) => {
+      state = data;
+      selectedMembers = new Set(state.members);
+      saveState();
+      renderList();
+    },
+    notify: toast,
+  });
   showView('settings');
 }
 
-/* ---------- 共有データ（Supabase） ---------- */
+/* ---------- 共有データ ---------- */
 function normalizeSharedData(value) {
   const d = value && value.data ? value.data : value;
   if (d && Array.isArray(d.rounds) && Array.isArray(d.members)) {
@@ -1225,69 +1236,54 @@ function normalizeSharedData(value) {
   return null;
 }
 
-function supabaseHeaders() {
-  return {
-    apikey: SUPABASE_KEY,
-    Authorization: `Bearer ${SUPABASE_KEY}`,
-    'Content-Type': 'application/json',
-  };
-}
-
-// Supabase（無ければ data.json）から最新の共有データを取得
 async function getSharedData() {
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/shared_scores?id=eq.${encodeURIComponent(SHARED_ROW_ID)}&select=data`,
-      { headers: supabaseHeaders(), cache: 'no-store' }
-    );
-    if (!res.ok) throw new Error('read ' + res.status);
-    const rows = await res.json();
-    const shared = normalizeSharedData(rows[0] && rows[0].data);
-    if (shared) return shared;
-  } catch (e) {
-    console.error(e);
-  }
-  return await fetchSharedData();
+  const shared = await sharedDatabase.read();
+  if (shared || sharedDatabase.isFirebase()) return shared;
+  return fetchSharedData();
 }
 
 // 最新の共有データを取得してこの端末を置き換える
 async function pullSharedData() {
   toast('最新データを確認中…');
-  const shared = await getSharedData();
+  let shared;
+  try {
+    shared = await getSharedData();
+  } catch (error) {
+    console.error(error);
+    toast(sharedDatabase.errorMessage(error));
+    return;
+  }
   if (!shared) {
-    toast('共有データが見つかりませんでした');
+    toast('共有データがありません。設定の [共有 DB] で初回移行を確認してください。');
     return;
   }
   // 内容が同一なら更新しない（削除・編集も差分として検知するため件数ではなく内容で比較）
   const sig = (s) => JSON.stringify({ m: s.members, d: s.defaultRate || DEFAULT_RATE, r: s.rounds, n: s.nextRound || null });
   if (sig(state) === sig(shared)) {
+    sharedDatabase.accept(shared);
     toast(`すでに最新です（${shared.rounds.length}ラウンド）`);
     return;
   }
   if (!confirm(`サーバーの共有データ（${shared.rounds.length}ラウンド）に更新しますか？\nこの端末（${state.rounds.length}ラウンド）は上書きされます。`)) {
     return;
   }
+  sharedDatabase.accept(shared);
   state = shared;
+  selectedMembers = new Set(state.members);
   saveState();
   renderList();
   showView('list');
   toast('最新データを取得しました');
 }
 
-// 現在のデータを Supabase へアップロード（全端末で共有・設定不要）
 async function pushSharedData(silent) {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/shared_scores?on_conflict=id`, {
-      method: 'POST',
-      headers: { ...supabaseHeaders(), Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ id: SHARED_ROW_ID, data: state, updated_at: new Date().toISOString() }),
-    });
-    if (!res.ok) throw new Error('write ' + res.status);
+    await sharedDatabase.write(state);
     if (!silent) toast('共有データを更新しました');
     return true;
   } catch (e) {
     console.error(e);
-    if (!silent) toast('共有更新に失敗しました');
+    toast(`端末には保存しました。${sharedDatabase.errorMessage(e)}`);
     return false;
   }
 }
@@ -1295,7 +1291,9 @@ async function pushSharedData(silent) {
 // 保存後に自動で共有を更新（全端末共有・設定不要）
 function autoPushIfEnabled() {
   toast('保存しました（共有を更新中…）');
-  pushSharedData(true).then((ok) => toast(ok ? '共有データを更新しました' : '共有更新に失敗しました'));
+  pushSharedData(true).then((ok) => {
+    if (ok) toast('共有データを更新しました');
+  });
   return true;
 }
 
@@ -1326,11 +1324,7 @@ function importBackup(file) {
       }
       const msg = `バックアップを読み込みます。\n現在のデータ（${state.rounds.length}ラウンド）は、ファイルの内容（${data.rounds.length}ラウンド）に置き換わります。よろしいですか？`;
       if (!confirm(msg)) return;
-      state = {
-        members: data.members,
-        defaultRate: data.defaultRate || DEFAULT_RATE,
-        rounds: data.rounds,
-      };
+      state = normalizeSharedData(data);
       saveState();
       renderList();
       showView('list');
@@ -1400,10 +1394,16 @@ async function init() {
   loadState();
   // 初回アクセス時は、公開されている共有データ(data.json)があれば取り込む
   if (!hadLocal) {
-    const shared = await getSharedData();
-    if (shared) {
-      state = shared;
-      saveState();
+    try {
+      const shared = await getSharedData();
+      if (shared) {
+        sharedDatabase.accept(shared);
+        state = shared;
+        saveState();
+      }
+    } catch (error) {
+      console.error(error);
+      toast(sharedDatabase.errorMessage(error));
     }
   }
   renderList();
