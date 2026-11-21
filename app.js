@@ -318,20 +318,21 @@ function roundHasDrink(round) {
   return !!(round.drink && num(round.drink.total) > 0);
 }
 
-// 飲み代を計算。ニアピン負けの人は各 -2000 を追加負担し、その分を差し引いた額を人数で等分。
 function computeDrink(round) {
   if (!roundHasDrink(round)) return null;
-  const total = num(round.drink.total);
-  const losers = (round.drink.nearpinLosers || []).filter((m) => state.members.includes(m));
-  const n = state.members.length;
-  const penaltyTotal = losers.length * NEARPIN_PENALTY;
-  const base = (total - penaltyTotal) / n; // 罰金分を引いた額を等分
-  const result = {};
-  state.members.forEach((m) => {
-    const penalty = losers.includes(m) ? NEARPIN_PENALTY : 0;
-    result[m] = { base, penalty, pay: base + penalty };
-  });
-  return { total, losers, base, result };
+  const members = state.members;
+  const total = Math.round(num(round.drink.total));
+  const losers = members.filter((m) => round.drink.nearpinLosers?.includes(m));
+  const sharedTotal = total - losers.length * NEARPIN_PENALTY;
+  const base = Math.floor(sharedTotal / members.length);
+  const remainder = sharedTotal - base * members.length;
+  const result = Object.fromEntries(members.map((m, i) => {
+    const share = base + (i < remainder ? 1 : 0) + (losers.includes(m) ? NEARPIN_PENALTY : 0);
+    const advance = num(round.drink.advances?.[m]);
+    return [m, { share, advance, balance: advance - share }];
+  }));
+  const advanceTotal = members.reduce((sum, m) => sum + result[m].advance, 0);
+  return { total, losers, remainder, result, advanceTotal };
 }
 
 /* ---------- 画面遷移 ---------- */
@@ -851,22 +852,27 @@ function openDetail(id) {
   const drink = computeDrink(round);
   let drinkHtml = '';
   if (drink) {
+    const yen = (amount) => `${amount.toLocaleString('ja-JP')} 円`;
     const drows = members
       .map((m) => {
-        const dr = drink.result[m];
+        const { share, advance, balance } = drink.result[m];
         const loser = drink.losers.includes(m);
-        return `<tr><td>${m}${loser ? '<span class="rank-pill">ニアピン負</span>' : ''}</td><td>${Math.round(dr.pay).toLocaleString('ja-JP')}円</td></tr>`;
+        const direction = balance > 0 ? '受け取る' : '支払う';
+        return `<tr>
+          <td>${escapeHtml(m)}${loser ? '<span class="rank-pill">ニアピン負</span>' : ''}</td>
+          <td>${yen(share)}</td><td>${yen(advance)}</td>
+          <td class="${signClass(balance)}">${balance === 0 ? '精算なし' : `<span class="drink-direction">${direction}</span> ${yen(Math.abs(balance))}`}</td>
+        </tr>`;
       })
       .join('');
-    const afterPenalty = drink.total - drink.losers.length * NEARPIN_PENALTY;
     let combineBlock = '';
     if (hasSettle) {
       const crows = members
         .map((m) => {
           const sc = c.result[m].total;
-          const pay = drink.result[m].pay;
-          const tot = sc - pay;
-          return `<tr><td>${m}</td><td class="${signClass(sc)}">${fmtYen(sc)}</td><td class="neg">${fmtYen(-pay)}</td><td class="${signClass(tot)}">${fmtYen(tot)}</td></tr>`;
+          const balance = drink.result[m].balance;
+          const tot = sc + balance;
+          return `<tr><td>${escapeHtml(m)}</td><td class="${signClass(sc)}">${fmtYen(sc)}</td><td class="${signClass(balance)}">${fmtYen(balance)}</td><td class="${signClass(tot)}">${fmtYen(tot)}</td></tr>`;
         })
         .join('');
       combineBlock = `
@@ -878,18 +884,19 @@ function openDetail(id) {
             <tbody>${crows}</tbody>
           </table>
         </div>
-        <div class="hint">「合計」＝ オリンピック精算込 −（飲み会の負担額）。</div>
+        <div class="hint">スコア精算額と飲み会の精算額を合算します。プラスは受取額、マイナスは支払額です。</div>
       </div>`;
     }
     drinkHtml = `
     <div class="section-title">追加精算（飲み会）</div>
     <div class="result-wrap">
-      <table class="result-table">
-        <thead><tr><th>メンバー</th><th>負担額</th></tr></thead>
+      <table class="result-table drink-table">
+        <thead><tr><th>メンバー</th><th>負担額</th><th>立て替え額</th><th>精算額</th></tr></thead>
         <tbody>${drows}</tbody>
       </table>
     </div>
-    <div class="hint">飲み代合計 ${Math.round(drink.total).toLocaleString('ja-JP')}円 ／ ニアピン負け ${drink.losers.length}人（各 −${NEARPIN_PENALTY.toLocaleString('ja-JP')}円）。差引 ${Math.round(afterPenalty).toLocaleString('ja-JP')}円 を ${members.length}人で等分し、負けた人は +${NEARPIN_PENALTY.toLocaleString('ja-JP')}円。</div>
+    <div class="hint">飲み代合計 ${yen(drink.total)}${drink.advanceTotal > 0 ? ` / 立て替え合計 ${yen(drink.advanceTotal)} / 飲み代の残額 ${yen(drink.total - drink.advanceTotal)}` : ''}</div>
+    <div class="hint">${drink.losers.length > 0 ? `ニアピンで負けた ${drink.losers.length} 人の追加負担 (各 ${yen(NEARPIN_PENALTY)}) を除き、` : ''}飲み代を ${members.length} 人で等分します。${drink.remainder ? '端数はメンバーの表示順に 1 円ずつ割り振ります。' : ''}</div>
     <div class="btn-row" style="margin-top:10px;"><button class="btn btn-secondary" id="drink-edit">飲み会精算を編集</button></div>
     ${combineBlock}`;
   } else {
@@ -897,7 +904,7 @@ function openDetail(id) {
     <div class="section-title">追加精算（飲み会）</div>
     <div class="form-card">
       <div class="btn-row"><button class="btn btn-secondary" id="drink-add">飲み会の割り勘を追加</button></div>
-      <div class="hint">飲み代を入力し、ニアピン負けの2人を選ぶと割り勘を自動計算します。スコア精算とは独立です。</div>
+      <div class="hint">飲み代と、立て替えがあれば各メンバーの立て替え額を入力すると、割り勘を計算できます。</div>
     </div>`;
   }
 
@@ -962,8 +969,16 @@ function openDrinkEdit(id) {
   const memberChecks = state.members
     .map(
       (m) =>
-        `<label class="check-row"><input type="checkbox" data-loser="${m}" ${losers.includes(m) ? 'checked' : ''} /> ${m}</label>`
+        `<label class="check-row"><input type="checkbox" data-loser="${escapeHtml(m)}" ${losers.includes(m) ? 'checked' : ''} /> ${escapeHtml(m)}</label>`
     )
+    .join('');
+  const advanceInputs = state.members
+    .map((m, i) => `
+      <div class="field">
+        <label for="dk-advance-${i}">${escapeHtml(m)}</label>
+        <input type="number" inputmode="numeric" min="0" max="${Number.MAX_SAFE_INTEGER}" step="1"
+          id="dk-advance-${i}" data-advance value="${num(d.advances?.[m]) || ''}" placeholder="0" />
+      </div>`)
     .join('');
 
   $('#view-drink').innerHTML = `
@@ -972,37 +987,51 @@ function openDrinkEdit(id) {
       <div class="d-date">${fmtDate(round.date)}</div>
       <div class="d-course">飲み会の割り勘</div>
     </div>
-    <div class="form-card">
-      <div class="field">
-        <label>飲み代合計（円）</label>
-        <input type="number" inputmode="numeric" id="dk-total" value="${d.total ?? ''}" placeholder="例）40000" />
+    <form id="dk-form">
+      <div class="form-card">
+        <div class="field">
+          <label for="dk-total">飲み代合計 (円)</label>
+          <input type="number" inputmode="numeric" id="dk-total" value="${d.total ?? ''}" placeholder="例: 40000"
+            min="1" max="${Number.MAX_SAFE_INTEGER}" step="1" required aria-describedby="dk-total-hint" />
+          <div class="hint" id="dk-total-hint">立て替え分を含む飲み代の総額を入力してください。</div>
+        </div>
+        <div class="field" role="group" aria-labelledby="dk-nearpin-label">
+          <label id="dk-nearpin-label">ニアピン負け (2 人まで)</label>
+          ${memberChecks}
+        </div>
+        <div class="hint">選んだ人は各 ${NEARPIN_PENALTY.toLocaleString('ja-JP')} 円を追加で負担します。その分を合計から引き、残りを ${state.members.length} 人で等分します。</div>
       </div>
-      <div class="field">
-        <label>ニアピン負け（2人・各 −${NEARPIN_PENALTY.toLocaleString('ja-JP')}円）</label>
-        ${memberChecks}
+      <div class="section-title" id="dk-advance-title">立て替え額 (円)</div>
+      <div class="form-card" role="group" aria-labelledby="dk-advance-title" aria-describedby="dk-advance-hint">
+        <div class="hint" id="dk-advance-hint">各メンバーが先に支払った金額を入力してください。空欄は 0 円として扱います。</div>
+        <div class="drink-advances">${advanceInputs}</div>
       </div>
-      <div class="hint">選んだ人は ${NEARPIN_PENALTY.toLocaleString('ja-JP')}円 を追加負担し、その分を合計から引いた額を ${state.members.length}人で等分します。</div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-secondary" id="dk-cancel">キャンセル</button>
-      <button class="btn btn-primary" id="dk-save">保存</button>
-    </div>
+      <div class="btn-row">
+        <button type="button" class="btn btn-secondary" id="dk-cancel">キャンセル</button>
+        <button type="submit" class="btn btn-primary" id="dk-save">保存</button>
+      </div>
+    </form>
     ${round.drink ? '<div class="btn-row" style="margin-top:10px;"><button class="btn btn-danger" id="dk-delete">飲み会精算を削除</button></div>' : ''}`;
 
   $('#dk-back').addEventListener('click', () => openDetail(id));
   $('#dk-cancel').addEventListener('click', () => openDetail(id));
-  $('#dk-save').addEventListener('click', () => {
-    const total = num($('#dk-total').value);
-    if (!total) {
-      alert('飲み代合計を入力してください。');
-      return;
-    }
-    const picked = $$('#view-drink input[data-loser]').filter((c) => c.checked).map((c) => c.dataset.loser);
+  $('#dk-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const total = Number($('#dk-total').value);
+    const picked = $$('#dk-form input[data-loser]:checked').map((c) => c.dataset.loser);
     if (picked.length > 2) {
-      alert('ニアピン負けは2人まで選べます。');
+      alert('ニアピン負けは 2 人まで選べます。');
       return;
     }
-    round.drink = { total, nearpinLosers: picked };
+    const advances = Object.fromEntries($$('#dk-form input[data-advance]')
+      .map((input, i) => [state.members[i], Number(input.value)])
+      .filter(([, amount]) => amount > 0));
+    const advanceTotal = Object.values(advances).reduce((sum, amount) => sum + amount, 0);
+    if (advanceTotal > total) {
+      alert('立て替え額の合計が飲み代合計を超えています。金額をご確認ください。');
+      return;
+    }
+    round.drink = { total, nearpinLosers: picked, ...(advanceTotal > 0 ? { advances } : {}) };
     saveState();
     renderList();
     openDetail(id);
@@ -1179,6 +1208,7 @@ function openSettings() {
   $('#s-back').addEventListener('click', () => showView('list'));
   $('#s-save').addEventListener('click', () => {
     const newNames = $$('#view-settings input[data-mi]').map((i) => i.value.trim() || 'メンバー');
+    const renamed = new Map(state.members.map((m, i) => [m, newNames[i]]));
     // 旧名 -> 新名 でプレイヤーキーを移行
     state.rounds.forEach((r) => {
       const np = {};
@@ -1186,6 +1216,14 @@ function openSettings() {
         np[newNames[i]] = r.players[old] || { score: '', prev: '', olympic: '', expense: '' };
       });
       r.players = np;
+      if (r.drink?.nearpinLosers) {
+        r.drink.nearpinLosers = r.drink.nearpinLosers.map((m) => renamed.get(m) ?? m);
+      }
+      if (r.drink?.advances) {
+        r.drink.advances = Object.fromEntries(
+          Object.entries(r.drink.advances).map(([m, amount]) => [renamed.get(m) ?? m, amount])
+        );
+      }
     });
     state.members = newNames;
     state.defaultRate = num($('#s-rate').value) || DEFAULT_RATE;

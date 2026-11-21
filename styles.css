@@ -258,6 +258,9 @@ input:focus, select:focus { outline:none; border-color: var(--green); }
 .check-row { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text); margin-bottom:12px; }
 .check-row input { width:auto; }
 
+.drink-advances { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; margin-top:12px; }
+.drink-advances .field { margin-bottom:0; }
+
 .hidden { display: none; }
 .linklike { border:none; background:none; color:var(--muted); font-size:12px; text-decoration:underline; cursor:pointer; padding:6px; }
 
@@ -344,6 +347,8 @@ button.btn {
 .settle-card .sc-rows .k { color:var(--muted); }
 .settle-card .sc-rows .v { text-align:right; }
 .rank-pill { font-size:12px; background:var(--green-light); color:var(--green-dark); padding:2px 8px; border-radius:999px; margin-left:8px; }
+.drink-table .rank-pill { display:table; margin:3px 0 0; }
+.drink-direction { display:block; font-size:12px; font-weight:700; }
 
 .empty { text-align:center; color:var(--muted); padding:40px 10px; }
 .hint { font-size:12px; color:var(--muted); margin-top:6px; }
